@@ -1,0 +1,7 @@
+# Keep LF everywhere so shell scripts and Makefiles work in WSL and on Linux/macOS.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
+*.wasm binary
