@@ -25,8 +25,6 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 3. **Trigger and payout:** if the price stays below a tier line for the sustain window, anyone can call `trigger` and the contract pays the holder in `fusdc` from the solver's margin.
 4. **Cross-chain payout (optional):** the contract asks the NEAR MPC signer (Chain Signatures) to sign a USDC transfer on one EVM testnet, checked by the contract so the executor cannot redirect funds.
 
-Design documents: [`floor-v3-idea.md`](floor-v3-idea.md) (the v4 idea), [`floor-build-guide.md`](floor-build-guide.md), [`floor-demo-script.md`](floor-demo-script.md).
-
 ## Prerequisites
 Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
 - Rust stable with the `wasm32-unknown-unknown` target
@@ -70,13 +68,11 @@ Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
 
 ## Repository layout
 ```
-contracts/      Rust NEAR contracts (fusdc, peg-pool, floor)
-packages/shared shared TypeScript types and canonical quote bytes
-apps/web        Next.js app (/play, landing, about)
-apps/worker     keeper, solver bots, arbitrage bot, payout executor
-docs/           SETUP, CLAIMS, spikes, threat model, evidence/
-scripts/        helper scripts (doctor, setup checklists)
-data/           static data
+contracts/   Rust NEAR contracts (fusdc, peg-pool, floor)
+apps/web     Next.js app (/play, landing, about)
+apps/worker  keeper, solver bots, arbitrage bot, payout executor
+docs/        SETUP, CLAIMS, spikes, threat model, evidence/
+scripts/     helper scripts
 ```
 
 ## Security

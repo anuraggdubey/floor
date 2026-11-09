@@ -1,3 +1,10 @@
+# ---------- private planning notes (kept locally, not published) ----------
+planning/
+floor-build-guide.md
+floor-demo-script.md
+floor-v3-idea.md
+near-hackathon-brief.md
+
 # ---------- secrets: never commit (hackathon rule: no keys in history) ----------
 .env
 .env.*
