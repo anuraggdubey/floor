@@ -7,6 +7,12 @@
 | S3 | Can a local sandbox run the full lifecycle offline for `make verify` / `make dry`? | **PASSED (2026-11-10).** `near-workspaces` 0.22 (feature `unstable` for `compile_project`) runs all three contracts: buy, replay refused, dump, gate closes, late buyer refused, sustained trigger, 15 fUSDC payout, solver margin accounting; plus a flash dump that recovers pays nothing. About 255 s for the two tests on the first run (includes wasm compiles). | **GO** for `make verify`; `make dry` (UI against sandbox) not built yet |
 | S4 | (optional) 1Click `dry:true` quote works with an API key; note limits | pending | pending |
 
+## Findings from the testnet end-to-end run (2026-11-11)
+- `rpc.testnet.near.org` now answers HTTP 429 "deprecated, stop using it". Use `https://test.rpc.fastnear.com` (set as the default; `.env.example` updated).
+- near-api-js 7.4 refuses to send a transaction unless the sender's balance covers prepaid gas at about 10x the real gas price (150 Tgas needed about 0.15 NEAR). Guest accounts therefore get 0.3 NEAR and calls ask for at most 100 Tgas.
+- The NEAR faucet (`sponsor-by-faucet-service`) rate-limits after about 10 accounts (HTTP 429).
+- Contract bug found by the test and fixed: the first sustained tier could be triggered immediately, locking the payout at 3%, and anyone (including the solver) could do it. Fixed with an on-chain settlement delay `settle_secs`; the testnet contract was upgraded in place with a `migrate` call that kept all solvers, margins and policies.
+
 ## S1 details
 Evidence and exact values: [`docs/evidence/s1-chain-signatures.md`](evidence/s1-chain-signatures.md). Code: `contracts/spike-signer/`.
 

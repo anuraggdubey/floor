@@ -9,6 +9,7 @@ const DEMO: Params = {
     { below_price_e8: 90_000_000, payout_bps: 1500 },
   ],
   sustain_secs: 30,
+  settle_secs: 30,
   lookback_secs: 120,
   wait_secs: 20,
   stale_secs: 60,

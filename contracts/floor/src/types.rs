@@ -21,6 +21,10 @@ pub struct Params {
     pub tiers: Vec<Tier>,
     /// How long the price must stay below a tier line before it counts as a trigger.
     pub sustain_secs: u64,
+    /// Settlement delay: a policy can only be triggered this long after the first tier was sustained, so deeper
+    /// tiers that are still sustaining are counted. Without it, whoever triggers first (a solver, say) could
+    /// lock the payout at the shallowest tier.
+    pub settle_secs: u64,
     /// Cover cannot be bought until the price has been in band for this long.
     pub lookback_secs: u64,
     /// A purchase only becomes Active after this wait, and only if the price stayed in band.
@@ -42,6 +46,7 @@ impl Params {
                 Tier { below_price_e8: 90_000_000, payout_bps: 1_500 },
             ],
             sustain_secs: 30,
+            settle_secs: 30,
             lookback_secs: 120,
             wait_secs: 20,
             stale_secs: 60,
@@ -59,6 +64,7 @@ impl Params {
         }
         assert!(self.tiers.last().unwrap().payout_bps <= 10_000, "PAYOUT_OVER_100_PERCENT");
         assert!(self.max_tenor_secs > self.wait_secs, "TENOR_NOT_ABOVE_WAIT");
+        assert!(self.settle_secs < self.max_tenor_secs, "SETTLE_NOT_BELOW_TENOR");
     }
 
     pub fn max_bps(&self) -> u32 {

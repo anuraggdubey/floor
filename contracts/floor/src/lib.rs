@@ -33,6 +33,37 @@ pub trait ExtPool {
     fn get_price_e8(&self) -> U128;
 }
 
+/// Layout of the first deployment (before `settle_secs` existed). Used only by `migrate`.
+#[near(serializers = [borsh])]
+struct ParamsV1 {
+    band_e8: u64,
+    tiers: Vec<Tier>,
+    sustain_secs: u64,
+    lookback_secs: u64,
+    wait_secs: u64,
+    stale_secs: u64,
+    max_tenor_secs: u64,
+    exposure_cap: U128,
+}
+
+#[near(serializers = [borsh])]
+struct FloorV1 {
+    owner: AccountId,
+    fusdc: AccountId,
+    pool: AccountId,
+    params: ParamsV1,
+    last_price_e8: u64,
+    last_price_ts: u64,
+    last_oob_ts: Option<u64>,
+    tier_state: Vec<TierState>,
+    sustained_log: Vec<(u64, u8)>,
+    solvers: IterableMap<AccountId, Solver>,
+    used_nonces: LookupSet<String>,
+    policies: IterableMap<u64, Policy>,
+    next_policy_id: u64,
+    total_exposure: u128,
+}
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Floor {
@@ -79,6 +110,42 @@ impl Floor {
     }
 
     // ------------------------------------------------------------------ admin
+
+    /// One-off state upgrade from the first deployed layout (no `settle_secs`) to the current one.
+    /// Keeps every solver, margin and policy. Callable only by the contract account itself.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate(settle_secs: u64) -> Self {
+        let old: FloorV1 = env::state_read().unwrap_or_else(|| env::panic_str("NO_OLD_STATE"));
+        let params = Params {
+            band_e8: old.params.band_e8,
+            tiers: old.params.tiers,
+            sustain_secs: old.params.sustain_secs,
+            settle_secs,
+            lookback_secs: old.params.lookback_secs,
+            wait_secs: old.params.wait_secs,
+            stale_secs: old.params.stale_secs,
+            max_tenor_secs: old.params.max_tenor_secs,
+            exposure_cap: old.params.exposure_cap,
+        };
+        params.validate();
+        Self {
+            owner: old.owner,
+            fusdc: old.fusdc,
+            pool: old.pool,
+            params,
+            last_price_e8: old.last_price_e8,
+            last_price_ts: old.last_price_ts,
+            last_oob_ts: old.last_oob_ts,
+            tier_state: old.tier_state,
+            sustained_log: old.sustained_log,
+            solvers: old.solvers,
+            used_nonces: old.used_nonces,
+            policies: old.policies,
+            next_policy_id: old.next_policy_id,
+            total_exposure: old.total_exposure,
+        }
+    }
 
     /// Owner only. Resets the breach tracking because tier indexes change meaning.
     pub fn set_params(&mut self, params: Params) {
@@ -232,9 +299,11 @@ impl Floor {
     pub fn trigger(&mut self, policy_id: u64) -> U128 {
         let p = self.policies.get(&policy_id).unwrap_or_else(|| env::panic_str("NO_POLICY")).clone();
         require!(p.status == Status::Active, "NOT_ACTIVE");
-        let tier = self
-            .deepest_tier_in_window(p.activate_ts, p.expires_ts)
+        let (first_ts, tier) = self
+            .settlement(p.activate_ts, p.expires_ts)
             .unwrap_or_else(|| env::panic_str("NOT_TRIGGERED"));
+        // Settlement delay: let deeper tiers that are still sustaining be counted before the payout is fixed.
+        require!(now_secs() >= first_ts + self.params.settle_secs, "SETTLING");
         let bps = self.params.tiers[tier as usize].payout_bps as u128;
         let amount = (p.notional.0 * bps / 10_000).min(p.max_payout.0);
         // The whole locked margin leaves lock; the payout leaves the contract, the rest returns to free margin.
@@ -415,11 +484,18 @@ impl Floor {
     }
 
     fn deepest_tier_in_window(&self, from_ts: u64, to_ts: u64) -> Option<u8> {
-        self.sustained_log
-            .iter()
-            .filter(|(ts, _)| *ts >= from_ts && *ts <= to_ts)
-            .map(|(_, i)| *i)
-            .max()
+        self.settlement(from_ts, to_ts).map(|(_, tier)| tier)
+    }
+
+    /// (time the first tier was sustained, deepest tier sustained so far) inside the window, if any.
+    fn settlement(&self, from_ts: u64, to_ts: u64) -> Option<(u64, u8)> {
+        let mut first: Option<u64> = None;
+        let mut deepest: Option<u8> = None;
+        for (ts, tier) in self.sustained_log.iter().filter(|(ts, _)| *ts >= from_ts && *ts <= to_ts) {
+            first = Some(first.map_or(*ts, |f| f.min(*ts)));
+            deepest = Some(deepest.map_or(*tier, |d| d.max(*tier)));
+        }
+        Some((first?, deepest?))
     }
 
     fn buy(&mut self, holder: &AccountId, amount: U128, q: Quote, signature: &str) -> Result<(), &'static str> {

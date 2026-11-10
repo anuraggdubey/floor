@@ -303,7 +303,7 @@ fn sustained_breach_pays_the_tier_and_returns_the_rest_of_the_margin() {
     // price falls to 0.95 (below the 0.97 line only) and stays there 30s
     t.price(95_000_000, T0 + 60);
     t.price(95_000_000, T0 + 95);
-    t.at("anyone.test", T0 + 96);
+    t.at("anyone.test", T0 + 126);
     let paid = t.c.trigger(1).0;
     assert_eq!(paid, 3_000_000, "3% of 100 fUSDC");
     let p = t.c.get_policy(1).unwrap();
@@ -325,7 +325,7 @@ fn deep_crash_pays_the_deepest_sustained_tier() {
     for ts in [60, 95] {
         t.price(85_000_000, T0 + ts); // below all three lines
     }
-    t.at("anyone.test", T0 + 96);
+    t.at("anyone.test", T0 + 126);
     assert_eq!(t.c.trigger(1).0, 15_000_000, "15% of 100 fUSDC");
     assert_eq!(t.c.get_policy(1).unwrap().tier_idx, Some(2));
 }
@@ -374,7 +374,7 @@ fn cannot_trigger_twice() {
     active_policy(&mut t);
     t.price(95_000_000, T0 + 60);
     t.price(95_000_000, T0 + 95);
-    t.at("anyone.test", T0 + 96);
+    t.at("anyone.test", T0 + 126);
     t.c.trigger(1);
     t.c.trigger(1);
 }
@@ -407,7 +407,7 @@ fn failed_transfer_keeps_the_amount_owed_and_can_be_retried() {
     active_policy(&mut t);
     t.price(95_000_000, T0 + 60);
     t.price(95_000_000, T0 + 95);
-    t.at("anyone.test", T0 + 96);
+    t.at("anyone.test", T0 + 126);
     t.c.trigger(1);
     set_ctx("floor.test", T0 + 97);
     assert!(!t.c.on_paid(1, U128(3_000_000), Err(PromiseError::Failed)));
@@ -557,10 +557,52 @@ fn margin_accounting_is_conserved_across_a_payout() {
     active_policy(&mut t);
     t.price(95_000_000, T0 + 60);
     t.price(95_000_000, T0 + 95);
-    t.at("anyone.test", T0 + 96);
+    t.at("anyone.test", T0 + 126);
     let paid = t.c.trigger(1).0;
     let s = t.solver();
     // margin now = deposited + premium earned - payout sent to the holder
     assert_eq!(s.free.0 + s.locked.0, total0 + 5_000_000 - paid);
     assert_eq!(t.c.total_exposure, 0);
+}
+
+// ------------------------------------------------------------ settlement delay
+
+#[test]
+#[should_panic(expected = "SETTLING")]
+fn cannot_trigger_before_the_settlement_delay() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    t.price(95_000_000, T0 + 60);
+    t.price(95_000_000, T0 + 95); // tier 0 sustained at T0+95; settles at T0+125
+    t.at("anyone.test", T0 + 100);
+    t.c.trigger(1);
+}
+
+#[test]
+fn deeper_tiers_that_sustain_during_the_settlement_delay_are_paid() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    // tier 0 is sustained first (shallow dip), then the price keeps falling and tiers 1 and 2 follow
+    t.price(95_000_000, T0 + 60);
+    t.price(95_000_000, T0 + 95);
+    t.price(85_000_000, T0 + 100);
+    t.price(85_000_000, T0 + 130);
+    t.at("anyone.test", T0 + 131);
+    assert_eq!(t.c.trigger(1).0, 15_000_000, "deepest tier wins, not the first one reached");
+    assert_eq!(t.c.get_policy(1).unwrap().tier_idx, Some(2));
+}
+
+#[test]
+fn nobody_can_lock_the_payout_at_the_shallowest_tier_by_triggering_early() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    t.price(95_000_000, T0 + 60);
+    t.price(95_000_000, T0 + 95);
+    // an early trigger attempt (for example by the solver) is refused ...
+    t.at("solver.test", T0 + 96);
+    let early = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        t.c.trigger(1);
+    }));
+    assert!(early.is_err());
+    assert_eq!(t.c.get_policy(1).unwrap().status, Status::Active);
 }

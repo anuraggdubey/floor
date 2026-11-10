@@ -26,6 +26,7 @@ export interface Params {
   band_e8: number;
   tiers: Tier[];
   sustain_secs: number;
+  settle_secs: number;
   lookback_secs: number;
   wait_secs: number;
   stale_secs: number;

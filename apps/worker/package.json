@@ -3,18 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Floor worker: solver bots, keeper and arbitrage bot. Pure logic is unit-tested offline; chain access is added in src/chain.ts.",
+  "description": "Floor worker: price feed, keeper, solver bots, arbitrage bot and the HTTP API used by the web app.",
   "license": "MIT",
   "scripts": {
+    "start": "tsx src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@noble/curves": "^1.9.0",
-    "@noble/hashes": "^1.8.0"
+    "@noble/hashes": "^1.8.0",
+    "dotenv": "^18.0.10",
+    "near-api-js": "^7.4.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }

@@ -50,7 +50,7 @@ async fn setup() -> Res<Env> {
             { "below_price_e8": 93_000_000u64, "payout_bps": 800 },
             { "below_price_e8": 90_000_000u64, "payout_bps": 1500 }
         ],
-        "sustain_secs": 3, "lookback_secs": 6, "wait_secs": 3, "stale_secs": 30,
+        "sustain_secs": 3, "settle_secs": 2, "lookback_secs": 6, "wait_secs": 3, "stale_secs": 30,
         "max_tenor_secs": 120, "exposure_cap": "1000000000000"
     });
     floor
@@ -239,7 +239,7 @@ async fn buy_dump_trigger_payout() -> Res<()> {
     assert_eq!(e.balance(latecomer.id()).await?, late_before, "late buyer refunded");
 
     // 7. the breach must be sustained: poke across the sustain window, then trigger
-    for _ in 0..5 {
+    for _ in 0..7 {
         sleep(Duration::from_secs(1)).await;
         e.poke().await?;
     }
