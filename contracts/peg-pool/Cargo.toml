@@ -1,0 +1,16 @@
+[package]
+name = "peg-pool"
+version = "0.1.0"
+edition = "2021"
+description = "Floor demo stablecoin pool: a constant-product pool of dUSD vs a USD unit. Anyone can dump it to break the peg (testnet demo only)."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }

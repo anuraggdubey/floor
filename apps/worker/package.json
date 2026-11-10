@@ -1,0 +1,21 @@
+{
+  "name": "@floor/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Floor worker: solver bots, keeper and arbitrage bot. Pure logic is unit-tested offline; chain access is added in src/chain.ts.",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

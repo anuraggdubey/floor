@@ -1,0 +1,15 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition = "2021"
+description = "Sandbox tests: deploy fusdc, peg-pool and floor to a local NEAR sandbox and run the full buy-dump-payout lifecycle. No secrets, no network after the first sandbox download."
+license = "MIT"
+publish = false
+
+[dev-dependencies]
+near-workspaces = { version = "0.22", features = ["unstable"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+serde_json = "1"
+ed25519-dalek = "2"
+anyhow = "1"
+sha2 = "0.10"

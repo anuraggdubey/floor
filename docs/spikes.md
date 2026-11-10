@@ -3,8 +3,8 @@
 | Spike | Question | Result | Decision |
 |---|---|---|---|
 | S1 | Can the `floor` contract build an EVM USDC transfer itself and get a valid signature from the NEAR MPC signer? | **Signing half PASSED on testnet (2026-11-09).** In-contract RLP + keccak matches viem byte for byte; the contract called `v1.signer-prod.testnet`; the returned signature recovers to the contract-derived EVM address. **Not yet done:** broadcasting on an EVM testnet (needs gas ETH and test USDC in the derived address, which a human must fund from faucets). | **GO** for F3 (Design A works). Broadcast check still pending. |
-| S2 | NEP-141 `ft_transfer_call` plus storage registration flow works as planned? | pending | pending |
-| S3 | Can a local sandbox run the full lifecycle offline for `make verify` / `make dry`? | pending | pending |
+| S2 | NEP-141 `ft_transfer_call` plus storage registration flow works as planned? | **PASSED in the local sandbox (2026-11-10).** `fusdc` (near-contract-standards 5.30.1) with `ft_transfer_call` into `floor.ft_on_transfer` works for margin deposits and for buying cover. Floor must be storage-registered with fUSDC; refunds on rejected purchases work by returning the full amount. Not yet run on testnet. | **GO** |
+| S3 | Can a local sandbox run the full lifecycle offline for `make verify` / `make dry`? | **PASSED (2026-11-10).** `near-workspaces` 0.22 (feature `unstable` for `compile_project`) runs all three contracts: buy, replay refused, dump, gate closes, late buyer refused, sustained trigger, 15 fUSDC payout, solver margin accounting; plus a flash dump that recovers pays nothing. About 255 s for the two tests on the first run (includes wasm compiles). | **GO** for `make verify`; `make dry` (UI against sandbox) not built yet |
 | S4 | (optional) 1Click `dry:true` quote works with an API key; note limits | pending | pending |
 
 ## S1 details

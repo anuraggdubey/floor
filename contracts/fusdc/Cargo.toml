@@ -1,0 +1,17 @@
+[package]
+name = "fusdc"
+version = "0.1.0"
+edition = "2021"
+description = "Floor demo money: a NEP-141 token with a rate-limited faucet. Testnet only; not real USDC."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+near-contract-standards = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["spike-signer"]
+members = ["spike-signer", "fusdc", "peg-pool", "floor", "integration-tests"]
 
 [profile.release]
 codegen-units = 1

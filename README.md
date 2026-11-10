@@ -4,17 +4,17 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 
 **Problem:** when a stablecoin loses its peg (for example USDC fell to about $0.87 in March 2023), holders have no cover they can buy in time, and pooled crypto cover has stayed small because capital is scarce and risk is hard to price.
 
-> **Status: under construction.** Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md). Nothing in this README should be read as working unless that file says `live` or `testnet`.
+> **Status: under construction.** The three contracts and the worker's quote and solver logic are built and tested locally (unit tests and a local-sandbox lifecycle test). Not yet built: testnet deployment, the keeper and bots running against a chain, the web app, and the optional EVM payout. Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md).
 
 ## What is real, testnet, simulated
 
 | Piece | Status |
 |---|---|
-| NEAR contracts (`fusdc`, `peg-pool`, `floor`) | testnet, NOT BUILT YET |
-| Demo money (NEP-141 `fusdc`) | testnet demo credits, not real USDC, NOT BUILT YET |
-| Stablecoin under test (`dUSD` on `peg-pool`) | simulated demo stable, NOT BUILT YET |
-| Solvers (3 bots) | simulated, scripted and deterministic, NOT BUILT YET |
-| Payout on NEAR (NEP-141 transfer) | testnet, NOT BUILT YET |
+| NEAR contracts (`fusdc`, `peg-pool`, `floor`) | built and tested in a local sandbox; testnet deployment NOT DONE YET |
+| Demo money (NEP-141 `fusdc`) | demo credits, not real USDC; built |
+| Stablecoin under test (`dUSD` on `peg-pool`) | simulated demo stable; built |
+| Solvers (3 bots) | simulated, scripted and deterministic; strategy and signing logic built, bots running on-chain NOT BUILT YET |
+| Payout on NEAR (NEP-141 transfer) | built; verified in the local sandbox, testnet NOT DONE YET |
 | Payout on an EVM chain via NEAR Chain Signatures | testnet, optional, NOT BUILT YET (depends on a go/no-go spike) |
 | NEAR Intents | no testnet exists; at most a `dry:true` quote display, NOT BUILT YET |
 | Guest accounts | custodial and testnet only, NOT BUILT YET |
@@ -36,7 +36,7 @@ Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
 1. Run `make doctor`.
    **See:** every line starts with `PASS` (rustc, cargo, cargo-near, near-cli, node, pnpm, git, make, wasm32 target).
 2. `make setup` installs JavaScript dependencies. *(Works once packages exist.)*
-3. `make verify` runs the offline checks (contract unit tests, a sandbox lifecycle test, invariants). **NOT BUILT YET.** Expected output when built: a list of `PASS` lines and a final `ALL PASS`.
+3. `make verify` runs the offline checks (contract unit tests, a local-sandbox lifecycle test, worker tests). No secrets or testnet needed; the first run downloads the NEAR sandbox binary and compiles the contracts, so allow several minutes. **See:** seven `PASS` lines and a final `ALL PASS`.
 4. `make dry` runs the whole app against a local NEAR sandbox with a stub signer and no secrets or network. **NOT BUILT YET.** Expected: open `http://localhost:3000/play`, press **Buy cover**, press **Dump**, see the late buyer blocked with `GATE_CLOSED`, then see the policy pay out.
 5. `make demo` runs against NEAR testnet using `.env` (copy `.env.example`; see [`docs/SETUP.md`](docs/SETUP.md)). **NOT BUILT YET.**
 
