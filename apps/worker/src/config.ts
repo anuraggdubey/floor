@@ -47,11 +47,15 @@ export interface Cfg {
 }
 
 export function loadConfig(): Cfg {
-  // rpc.testnet.near.org is deprecated and answers 429; fastnear is the primary. See https://docs.near.org/api/rpc/providers
+  // rpc.testnet.near.org is deprecated and answers 429 to everything, so it is deliberately NOT a fallback:
+  // failing over to it only replaces a real error with a misleading one. See https://docs.near.org/api/rpc/providers
   const rpc = opt("NEAR_RPC_URL", "https://test.rpc.fastnear.com");
   return {
     port: Number(opt("WORKER_PORT", "8787")),
-    rpcUrls: [rpc, "https://rpc.testnet.near.org"].filter((v, i, a) => a.indexOf(v) === i),
+    // two endpoints so reads can be spread; free tiers rate-limit a single host quickly
+    rpcUrls: [rpc, "https://test.rpc.fastnear.com", "https://archival-rpc.testnet.fastnear.com"].filter(
+      (v, i, a) => a.indexOf(v) === i,
+    ),
     fusdc: req("FUSDC_CONTRACT"),
     pool: req("POOL_CONTRACT"),
     floor: req("FLOOR_CONTRACT"),

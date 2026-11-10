@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ tokens */
+@theme {
+  /* Near-black base with a warm off-white, like Townhouse; DeepBook electric blue as the signature. */
+  --color-ink: #08090b;
+  --color-ink-2: #0e1013;
+  --color-ink-3: #16191e;
+  --color-line: #23272e;
+  --color-bone: #f3f2ee;
+  --color-mute: #8d939c;
+  --color-blue: #1e6ef3;
+  --color-blue-lit: #4b8dff;
+  --color-amber: #ffb454;
+  --color-mint: #46e39b;
+  --color-blood: #ff4438;
+
+  --font-display: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: var(--font-serif), Georgia, serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-smooth: cubic-bezier(0.65, 0.05, 0, 1);
+}
+
+/* ------------------------------------------------------------------- base */
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--color-blue);
+  color: #fff;
+}
+
+/* Lenis drives scroll position; it needs the page to not fight it. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+/* Tabular, slashed-zero numerals everywhere a figure can change under you. */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* -------------------------------------------------------------- utilities */
+@utility shell {
+  width: 100%;
+  max-width: 78rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (width >= 48rem) {
+    padding-inline: 2rem;
+  }
+}
+
+/* Oversized display type: Townhouse-tight tracking that loosens as the size drops. */
+@utility display-xl {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  font-size: clamp(2.75rem, 9vw, 7.5rem);
+}
+@utility display-lg {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+}
+@utility display-md {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
+}
+
+/* The Walton moment: one giant editorial serif headline. */
+@utility editorial {
+  font-family: var(--font-editorial);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 0.88;
+  font-size: clamp(3rem, 13vw, 11rem);
+}
+
+@utility kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-mute);
+}
+
+@utility hairline {
+  border-color: color-mix(in oklab, var(--color-line) 100%, transparent);
+}
+
+/* ------------------------------------------------------------- animations */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheen {
+  from {
+    background-position: -220% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-blood) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 1.4rem transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Reveal-on-scroll: set by an IntersectionObserver in RevealProvider. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(1.75rem);
+  transition:
+    opacity 0.9s var(--ease-out-quint),
+    transform 0.9s var(--ease-out-quint);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal][data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Letter-by-letter headline reveal. */
+[data-letter] {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.6em) rotate(2deg);
+  transition:
+    opacity 0.7s var(--ease-out-quint),
+    transform 0.7s var(--ease-out-quint);
+  transition-delay: var(--letter-delay, 0ms);
+}
+[data-shown="true"] [data-letter] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-letter] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ------------------------------------------------------------ scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #343a43;
+}

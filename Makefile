@@ -1,7 +1,7 @@
 # Floor build entry points. Run inside Linux, macOS or WSL.
 # Targets are added as the pieces are built.
 
-.PHONY: doctor setup verify build-contracts worker e2e
+.PHONY: doctor setup verify build-contracts worker web e2e
 
 doctor:
 	@bash scripts/doctor.sh
@@ -25,3 +25,7 @@ worker:
 # Full end-to-end check against the running worker and NEAR testnet (about 4 minutes; real time windows).
 e2e:
 	node scripts/e2e.mjs
+
+# The web app on :3000. Needs `make worker` running; /api/* is proxied to it.
+web:
+	cd apps/web && pnpm dev

@@ -107,7 +107,7 @@ export function startKeeper(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
 
       const policies =
         count > 0
-          ? ((await chain.view<PolicyView[]>(cfg.floor, "list_policies", { from_index: Math.max(0, count - 100), limit: 100 })) ?? [])
+          ? ((await chain.view<PolicyView[]>(cfg.floor, "list_policies", { from_index: Math.max(0, count - 40), limit: 40 })) ?? [])
           : [];
       lastFetch = Date.now();
       const open = policies.some((p) => ["Pending", "Active"].includes(p.status) || (p.owed !== "0" && !p.paying));
@@ -120,10 +120,12 @@ export function startKeeper(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
         }
       }
 
-      // Poke often when something needs a fresh price, rarely otherwise (each poke costs a little gas).
-      const interval = open || hot ? 4000 : 20000;
+      // Poke often when something needs a fresh price, rarely otherwise (each poke costs gas and an RPC call).
+      const interval = open || hot ? 5000 : 25000;
       if (Date.now() - lastPoke >= interval) await pokeNow();
 
+      // Nothing below matters unless a policy is in flight, and these are the most expensive reads.
+      if (!open) return;
       const log = ((await chain.view<Array<[number, number]>>(cfg.floor, "get_sustained_log")) ?? []) as Array<[number, number]>;
       settleSecs ??= Number((await chain.view<any>(cfg.floor, "get_params"))?.settle_secs ?? 0);
       for (const a of planActions(policies, log, now, settleSecs)) await perform(a);
@@ -134,7 +136,7 @@ export function startKeeper(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
     }
   }
 
-  const timer = setInterval(() => void tick(), 2500);
+  const timer = setInterval(() => void tick(), 5000);
   void tick();
   return {
     stop: () => clearInterval(timer),

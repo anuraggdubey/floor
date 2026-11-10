@@ -4,7 +4,7 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 
 **Problem:** when a stablecoin loses its peg (for example USDC fell to about $0.87 in March 2023), holders have no cover they can buy in time, and pooled crypto cover has stayed small because capital is scarce and risk is hard to price.
 
-> **Status: under construction.** Built and verified: the three contracts (deployed on NEAR testnet), the worker (price feed, keeper, three scripted solver bots, arbitrage bot, HTTP API) and a full end-to-end test on testnet (`make worker`, then `make e2e`). Not yet built: the web app and the optional EVM payout. Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md).
+> **Status: under construction.** Built and verified: the three contracts (deployed on NEAR testnet), the worker (price feed, keeper, three scripted solver bots, arbitrage bot, HTTP API), the web app (landing story and `/play`), and a full end-to-end run on testnet both from the command line and through the browser. Not yet built: the optional EVM payout via Chain Signatures, and hosting. Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md).
 
 ## What is real, testnet, simulated
 
@@ -39,7 +39,11 @@ Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
 3. `make verify` runs the offline checks (contract unit tests, a local-sandbox lifecycle test, worker tests). No secrets or testnet needed; the first run downloads the NEAR sandbox binary and compiles the contracts, so allow several minutes. **See:** seven `PASS` lines and a final `ALL PASS`.
 4. `make dry` runs the whole app against a local NEAR sandbox with a stub signer and no secrets or network. **NOT BUILT YET.** Expected: open `http://localhost:3000/play`, press **Buy cover**, press **Dump**, see the late buyer blocked with `GATE_CLOSED`, then see the policy pay out.
 5. Live testnet check (needs `.env`, see [`docs/SETUP.md`](docs/SETUP.md)): run `make worker` in one terminal, then `make e2e` in another. **See:** about 14 `PASS` lines and `E2E ALL PASS` after roughly 4 minutes: a guest buys cover, the peg is dumped on-chain, a late buyer is refused with `GATE_CLOSED`, the holder is paid 15 fUSDC, and the peg is restored.
-6. Web app (`/play`): **NOT BUILT YET.**
+6. The web app. In one terminal `make worker`, in another `make web`, then open `http://localhost:3000`.
+   **See:** a landing page whose hero is a live isometric diorama driven by the real on-chain price, and
+   `/play`, where you get a testnet account in one click, buy cover from three competing solvers, press
+   **25k** three times to break the peg, and watch the contract pay you. Every action links to the
+   transaction on NEAR explorer.
 
 ## NEAR features used and where
 | Feature | Where | Status |
@@ -70,7 +74,7 @@ Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
 ## Repository layout
 ```
 contracts/   Rust NEAR contracts (fusdc, peg-pool, floor)
-apps/web     Next.js app (/play, landing, about)
+apps/web     Next.js app: landing story and /play, the arena
 apps/worker  keeper, solver bots, arbitrage bot, payout executor
 docs/        SETUP, CLAIMS, spikes, threat model, evidence/
 scripts/     helper scripts

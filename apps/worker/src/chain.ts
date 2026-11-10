@@ -35,15 +35,22 @@ export class Chain {
   private providers: JsonRpcProvider[];
   private accounts = new Map<string, Account>();
   private queues = new Map<string, Promise<unknown>>();
+  private rr = 0;
 
   constructor(private cfg: Cfg) {
     this.providers = cfg.rpcUrls.map((url) => new JsonRpcProvider({ url }));
   }
 
-  /** Read-only call with failover across RPC endpoints. Returns undefined when the contract returns null. */
+  /**
+   * Read-only call, spread round-robin across the configured endpoints and failing over on error.
+   * Returns undefined when the contract returns null.
+   */
   async view<T = any>(contractId: string, method: string, args: Record<string, unknown> = {}): Promise<T | undefined> {
     let lastErr: unknown;
-    for (const p of this.providers) {
+    const n = this.providers.length;
+    const start = this.rr++ % n;
+    for (let i = 0; i < n; i++) {
+      const p = this.providers[(start + i) % n]!;
       try {
         return (await p.callFunction({ contractId, method, args })) as T | undefined;
       } catch (e) {

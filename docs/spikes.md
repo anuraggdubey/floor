@@ -13,6 +13,11 @@
 - The NEAR faucet (`sponsor-by-faucet-service`) rate-limits after about 10 accounts (HTTP 429).
 - Contract bug found by the test and fixed: the first sustained tier could be triggered immediately, locking the payout at 3%, and anyone (including the solver) could do it. Fixed with an on-chain settlement delay `settle_secs`; the testnet contract was upgraded in place with a `migrate` call that kept all solvers, margins and policies.
 
+## Findings from building the web app (2026-11-11)
+- Public NEAR RPC free tiers rate-limit hard. Polling the pool every 1s plus a 2.5s keeper tick was enough to get `-429 Rate limits exceeded` from FastNEAR. Now: price every 3s, gate every 6s, keeper every 5s, reads spread round-robin over two endpoints, and the keeper skips its expensive reads when no policy is in flight.
+- Next dev must be told `allowedDevOrigins` when it is reached over a LAN/WSL address, or the HMR client reload-loops and the page never hydrates — with no error in the console.
+- The repo lives on the Windows filesystem, so inotify never fires inside WSL. `watchOptions.pollIntervalMs` in next.config is required for edits to be picked up at all, and brand-new route files still need a dev-server restart.
+
 ## S1 details
 Evidence and exact values: [`docs/evidence/s1-chain-signatures.md`](evidence/s1-chain-signatures.md). Code: `contracts/spike-signer/`.
 

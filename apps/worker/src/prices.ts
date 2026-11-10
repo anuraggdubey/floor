@@ -44,8 +44,9 @@ export class PriceFeed {
   start(): void {
     void this.poll();
     void this.refreshGate();
-    this.timer = setInterval(() => void this.poll(), 1000);
-    this.gateTimer = setInterval(() => void this.refreshGate(), 2000);
+    // Public RPC free tiers rate-limit quickly, so poll only as often as the picture really needs.
+    this.timer = setInterval(() => void this.poll(), 3000);
+    this.gateTimer = setInterval(() => void this.refreshGate(), 6000);
   }
 
   stop(): void {
