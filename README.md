@@ -10,7 +10,7 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 
 | Piece | Status |
 |---|---|
-| NEAR contracts (`fusdc`, `peg-pool`, `floor`) | built and tested in a local sandbox; testnet deployment NOT DONE YET |
+| NEAR contracts (`fusdc`, `peg-pool`, `floor`) | testnet: `floorxa-fusdc.testnet`, `floorxa-pool.testnet`, `floorxa-floor.testnet` (deployed 2026-11-11); also tested in a local sandbox |
 | Demo money (NEP-141 `fusdc`) | demo credits, not real USDC; built |
 | Stablecoin under test (`dUSD` on `peg-pool`) | simulated demo stable; built |
 | Solvers (3 bots) | simulated, scripted and deterministic; strategy and signing logic built, bots running on-chain NOT BUILT YET |

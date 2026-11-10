@@ -1,5 +1,9 @@
-# ---------- private planning notes (kept locally, not published) ----------
+# ---------- private planning notes and account credentials (kept locally, not published) ----------
 planning/
+ACCOUNTS.md
+**/ACCOUNTS.md
+CREDENTIALS.md
+**/CREDENTIALS.md
 floor-build-guide.md
 floor-demo-script.md
 floor-v3-idea.md
