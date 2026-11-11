@@ -37,23 +37,27 @@ Linux, macOS or WSL (Windows users: run everything inside WSL). You need:
    **See:** every line starts with `PASS` (rustc, cargo, cargo-near, near-cli, node, pnpm, git, make, wasm32 target).
 2. `make setup` installs JavaScript dependencies. *(Works once packages exist.)*
 3. `make verify` runs the offline checks (contract unit tests, a local-sandbox lifecycle test, worker tests). No secrets or testnet needed; the first run downloads the NEAR sandbox binary and compiles the contracts, so allow several minutes. **See:** seven `PASS` lines and a final `ALL PASS`.
-4. `make dry` runs the whole app against a local NEAR sandbox with a stub signer and no secrets or network. **NOT BUILT YET.** Expected: open `http://localhost:3000/play`, press **Buy cover**, press **Dump**, see the late buyer blocked with `GATE_CLOSED`, then see the policy pay out.
+4. `make dry` (offline run against a local sandbox) is **not built**. Use step 5 or 6 against testnet instead.
 5. Live testnet check (needs `.env`, see [`docs/SETUP.md`](docs/SETUP.md)): run `make worker` in one terminal, then `make e2e` in another. **See:** about 14 `PASS` lines and `E2E ALL PASS` after roughly 4 minutes: a guest buys cover, the peg is dumped on-chain, a late buyer is refused with `GATE_CLOSED`, the holder is paid 15 fUSDC, and the peg is restored.
 6. The web app. In one terminal `make worker`, in another `make web`, then open `http://localhost:3000`.
    **See:** a landing page whose hero is a live isometric diorama driven by the real on-chain price, and
    `/play`, where you get a testnet account in one click, buy cover from three competing solvers, press
    **25k** three times to break the peg, and watch the contract pay you. Every action links to the
    transaction on NEAR explorer.
+   **Shortcut:** press **Watch it happen** on `/play` and the app runs the whole story by itself in about
+   2.5 minutes (buy, break the peg, late buyer refused, settle, payout, optional Ethereum payout), with
+   captions, camera moves and sound. It uses real testnet transactions.
+   Motion effects can be previewed without transactions at `/dev/diorama` (development only).
 
 ## NEAR features used and where
 | Feature | Where | Status |
 |---|---|---|
-| Own contracts in Rust (near-sdk 5.x) | `contracts/` | NOT BUILT YET |
-| NEP-141 fungible token, `ft_transfer_call` / `ft_on_transfer` | `contracts/fusdc`, `contracts/floor` | NOT BUILT YET |
-| `env::ed25519_verify` for solver-signed quotes | `contracts/floor` | NOT BUILT YET |
-| Cross-contract calls and callbacks (price reads, payouts) | `contracts/floor` | NOT BUILT YET |
-| Chain Signatures (MPC) for an EVM payout | `contracts/floor`, `apps/worker` | NOT BUILT YET, spike pending |
-| Intents 1Click `dry:true` quote | `apps/web` | NOT BUILT YET, optional |
+| Own contracts in Rust (near-sdk 5.x) | `contracts/` | testnet, 51 + 6 + 10 unit tests, sandbox lifecycle tests |
+| NEP-141 fungible token, `ft_transfer_call` / `ft_on_transfer` | `contracts/fusdc`, `contracts/floor`, `contracts/peg-pool` | testnet |
+| `env::ed25519_verify` for solver-signed quotes | `contracts/floor` | testnet |
+| Cross-contract calls and callbacks (price reads, payouts) | `contracts/floor` | testnet |
+| Chain Signatures (MPC): the contract builds the EVM USDC transfer itself and the MPC signs it | `contracts/floor/src/evm.rs`, `apps/worker/src/evm.ts` | testnet, real Sepolia USDC payout, see [`docs/evidence/f3-cross-chain-payout.md`](docs/evidence/f3-cross-chain-payout.md) |
+| Intents 1Click `dry:true` quote | `apps/web` | not built (optional) |
 
 ## Known limitations
 - The peg under test is a demo stable on a demo pool, not USDC. The March 2023 USDC depeg is used only as a labelled historical reference.

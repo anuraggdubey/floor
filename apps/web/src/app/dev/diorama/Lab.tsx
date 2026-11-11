@@ -3,6 +3,24 @@
 import { useState } from "react";
 import { Diorama } from "@/components/Diorama";
 import type { SceneState } from "@/lib/diorama";
+import { DirectorOverlay } from "@/components/play/DirectorOverlay";
+import type { DirectorView } from "@/lib/useDirector";
+
+const mock: DirectorView = {
+  running: true,
+  done: false,
+  error: null,
+  chapter: { n: 6, title: "Too late", line: "A latecomer tries to buy cover.", sub: "The contract looks at the price, sees stress, and says no." },
+  total: 9,
+  quotes: null,
+  refused: "GATE_CLOSED",
+  countdown: { label: "contract settles", until: Date.now() + 45000, total: 70000, approx: true },
+  dumps: 3,
+  tx: [{ label: "Policy bought", url: "#" }],
+  result: null,
+  camera: { scale: 1, x: 0, y: 0 },
+  focus: true,
+};
 
 const base: SceneState = {
   price: 1,
@@ -30,6 +48,7 @@ const base: SceneState = {
 
 export function Lab() {
   const [s, setS] = useState<SceneState>(base);
+  const [view, setView] = useState<DirectorView | null>(null);
   const fire = () => {
     const t = Date.now();
     setS((x) => ({ ...x, shockAt: t, impacts: [...(x.impacts ?? []), t] }));
@@ -42,6 +61,15 @@ export function Lab() {
         </button>
         <button id="pay" onClick={() => setS((x) => ({ ...x, paidAt: Date.now() }))} className="bg-amber/20 text-amber rounded px-3 py-1.5">
           Payout
+        </button>
+        <button id="stamp" onClick={() => setView({ ...mock, countdown: null })} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
+          Refusal stamp
+        </button>
+        <button id="count" onClick={() => setView({ ...mock, refused: null, chapter: { n: 7, title: "Hold the line", line: "Stay under a line long enough and it counts.", sub: "A flash that recovers pays nothing." } })} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
+          Countdown
+        </button>
+        <button id="finale" onClick={() => setView({ ...mock, running: false, done: true, refused: null, countdown: null, result: { premium: 0.7, payout: 15, seconds: 147, evmUrl: null, evmSkipped: null } })} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
+          Finale
         </button>
         <label className="text-mute flex items-center gap-2">
           peg
@@ -59,6 +87,7 @@ export function Lab() {
       </div>
       <div className="relative flex-1">
         <Diorama scene={s} className="absolute inset-0 h-full w-full" scale={1} />
+        {view && <DirectorOverlay view={view} onStop={() => setView(null)} onRestart={() => setView(null)} onClose={() => setView(null)} soundOn={false} onToggleSound={() => {}} />}
       </div>
     </div>
   );

@@ -147,7 +147,7 @@ export function drawScene(
   drawHouses(ctx, v, s, t, paid);
   if (anySustained) drawCracks(ctx, v, t, stress);
   drawEmbers(ctx, v, t, stress);
-  for (const at of s.impacts ?? []) if (tMs - at < 2400) drawImpact(ctx, v, tMs - at, at, waterZ);
+  for (const at of s.impacts ?? []) if (tMs - at < 3000) drawImpact(ctx, v, tMs - at, at, waterZ);
   if (paid > 0) drawPayoutBurst(ctx, v, paid);
   if (s.paidAt && tMs - s.paidAt < 4200) drawCoins(ctx, v, s, tMs - s.paidAt);
 
@@ -669,7 +669,7 @@ function drawPayoutBurst(ctx: CanvasRenderingContext2D, v: View, k: number) {
 function drawImpact(ctx: CanvasRenderingContext2D, v: View, ageMs: number, seed: number, waterZ: number) {
   const cx = (B0 + B1) / 2;
   const cy = (B0 + B1) / 2;
-  const FALL = 380;
+  const FALL = 520;
 
   if (ageMs < FALL) {
     // fall: accelerating, with a streak behind it
@@ -701,24 +701,39 @@ function drawImpact(ctx: CanvasRenderingContext2D, v: View, ageMs: number, seed:
   const a = (ageMs - FALL) / 1000; // seconds since the splash
   const [sx, sy] = iso(v, cx, cy, waterZ);
 
+  // a bright flash at the moment of contact, so the hit reads even in a single frame
+  if (a < 0.35) {
+    const f = 1 - a / 0.35;
+    const fl = ctx.createRadialGradient(sx, sy, 0, sx, sy, v.tw * 2.4);
+    fl.addColorStop(0, `rgba(255,236,214,${0.85 * f})`);
+    fl.addColorStop(0.35, `rgba(255,150,100,${0.4 * f})`);
+    fl.addColorStop(1, "rgba(255,120,80,0)");
+    ctx.save();
+    ctx.fillStyle = fl;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, v.tw * 2.4, v.th * 2.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // rings spreading over the surface
   ctx.save();
-  for (let r = 0; r < 3; r++) {
-    const ra = a - r * 0.16;
+  for (let r = 0; r < 4; r++) {
+    const ra = a - r * 0.18;
     if (ra <= 0) continue;
-    const life = clamp(ra / 1.5, 0, 1);
-    ctx.globalAlpha = (1 - life) * 0.7;
-    ctx.strokeStyle = r === 0 ? "#ffd9c4" : "#a8c8ff";
-    ctx.lineWidth = 2.4 - life * 1.6;
+    const life = clamp(ra / 1.7, 0, 1);
+    ctx.globalAlpha = (1 - life) * 0.95;
+    ctx.strokeStyle = r === 0 ? "#fff1e6" : "#cfe0ff";
+    ctx.lineWidth = 3.6 - life * 2.4;
     ctx.beginPath();
-    ctx.ellipse(sx, sy, v.tw * (0.3 + life * 2.6), v.th * (0.3 + life * 2.6), 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, v.tw * (0.3 + life * 3.1), v.th * (0.3 + life * 3.1), 0, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.restore();
 
   // droplets on ballistic arcs
   ctx.save();
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 28; i++) {
     const ang = rnd(seed + i * 3.1) * Math.PI * 2;
     const speed = 1.1 + rnd(seed + i * 7.7) * 2.3;
     const up = 2.2 + rnd(seed + i * 5.3) * 3.4;
@@ -728,10 +743,10 @@ function drawImpact(ctx: CanvasRenderingContext2D, v: View, ageMs: number, seed:
     const dx = Math.cos(ang) * speed * lt;
     const dy = Math.sin(ang) * speed * lt;
     const [px, py] = iso(v, cx + dx, cy + dy, waterZ + Math.max(0, z));
-    ctx.globalAlpha = clamp(1 - lt / 1.2, 0, 1) * 0.9;
+    ctx.globalAlpha = clamp(1 - lt / 1.6, 0, 1);
     ctx.fillStyle = i % 3 === 0 ? "#ffd2b8" : "#9cc2ff";
     ctx.beginPath();
-    ctx.arc(px, py, Math.max(1.4, v.tw * 0.035), 0, Math.PI * 2);
+    ctx.arc(px, py, Math.max(2.2, v.tw * 0.055), 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
