@@ -8,13 +8,15 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "derive-address": "node scripts/derive-evm-address.mjs"
   },
   "dependencies": {
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.8.0",
     "dotenv": "^18.0.10",
-    "near-api-js": "^7.4.0"
+    "near-api-js": "^7.4.0",
+    "viem": "2.57.17"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

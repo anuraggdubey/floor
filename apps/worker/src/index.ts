@@ -8,6 +8,7 @@ import { startArb } from "./arb.js";
 import { Bots } from "./bots.js";
 import { Guests } from "./guests.js";
 import { startServer } from "./server.js";
+import { startEvmExecutor } from "./evm.js";
 
 const cfg = loadConfig();
 const chain = new Chain(cfg);
@@ -18,6 +19,7 @@ const keeper = startKeeper(chain, cfg, feed, bus);
 const arb = startArb(chain, cfg, feed, bus);
 const bots = new Bots(chain, cfg, feed);
 const guests = new Guests(chain, cfg);
+startEvmExecutor(chain, cfg, bus);
 startServer({ chain, cfg, bus, feed, bots, guests, keeper, arb });
 
 bus.subscribe((ev) => {

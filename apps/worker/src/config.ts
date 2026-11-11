@@ -44,6 +44,11 @@ export interface Cfg {
   maxGuests: number;
   stateDir: string;
   explorer: string;
+  /** Cross-chain payout leg; off entirely when the RPC URL is unset. */
+  evmRpcUrl: string;
+  /** The address the Floor contract controls via Chain Signatures (scripts/derive-evm-address.mjs). */
+  evmPoolAddress: string;
+  evmExplorer: string;
 }
 
 export function loadConfig(): Cfg {
@@ -80,5 +85,8 @@ export function loadConfig(): Cfg {
     maxGuests: Number(opt("MAX_GUESTS", "25")),
     stateDir: path.join(REPO_ROOT, ".floor-state"),
     explorer: "https://explorer.testnet.near.org",
+    evmRpcUrl: opt("EVM_RPC_URL", ""),
+    evmPoolAddress: opt("EVM_POOL_ADDRESS", ""),
+    evmExplorer: opt("EVM_EXPLORER", "https://sepolia.etherscan.io"),
   };
 }

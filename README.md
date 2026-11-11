@@ -4,7 +4,7 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 
 **Problem:** when a stablecoin loses its peg (for example USDC fell to about $0.87 in March 2023), holders have no cover they can buy in time, and pooled crypto cover has stayed small because capital is scarce and risk is hard to price.
 
-> **Status: under construction.** Built and verified: the three contracts (deployed on NEAR testnet), the worker (price feed, keeper, three scripted solver bots, arbitrage bot, HTTP API), the web app (landing story and `/play`), and a full end-to-end run on testnet both from the command line and through the browser. Not yet built: the optional EVM payout via Chain Signatures, and hosting. Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md).
+> **Status: under construction.** Built and verified: the three contracts (deployed on NEAR testnet), the worker (price feed, keeper, three scripted solver bots, arbitrage bot, HTTP API), the web app (landing story and `/play`), and a full end-to-end run on testnet both from the command line and through the browser. The optional cross-chain payout via Chain Signatures is also verified on Ethereum Sepolia. Not yet built: hosting. Sections marked `NOT BUILT YET` do not work today. The authoritative list of what is verified is [`docs/CLAIMS.md`](docs/CLAIMS.md).
 
 ## What is real, testnet, simulated
 
@@ -15,7 +15,7 @@ Floor is a NEAR-native stablecoin depeg cover market, built for NEAR HACKATHON 2
 | Stablecoin under test (`dUSD` on `peg-pool`) | simulated demo stable; built |
 | Solvers (3 bots) | simulated, scripted and deterministic; built and running against testnet with their own accounts and margin |
 | Payout on NEAR (NEP-141 transfer) | built; verified in the local sandbox, testnet NOT DONE YET |
-| Payout on an EVM chain via NEAR Chain Signatures | testnet, optional, NOT BUILT YET (depends on a go/no-go spike) |
+| Payout on an EVM chain via NEAR Chain Signatures | testnet, verified: 5 USDC landed on Ethereum Sepolia from a contract-controlled address (see `docs/evidence/f3-cross-chain-payout.md`). Confirmation back on NEAR is a trusted step. |
 | NEAR Intents | no testnet exists; at most a `dry:true` quote display, NOT BUILT YET |
 | Guest accounts | custodial and testnet only, NOT BUILT YET |
 

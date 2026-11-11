@@ -242,6 +242,37 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
       return send(res, 200, { ok: r.ok, tx: r.hash, tx_url: chain.explorerTx(r.hash), price_e8: Number(after), error: r.error ?? null });
     }
 
+    // ----------------------------------------------------- cross-chain payout
+    if (req.method === "GET" && p === "/api/evm") {
+      const [evm, payouts] = await Promise.all([
+        chain.view<any>(cfg.floor, "get_evm_chain"),
+        chain.view<any[]>(cfg.floor, "list_evm_payouts"),
+      ]);
+      let mine: string | null = null;
+      const token = String(req.headers["x-guest-token"] ?? "");
+      const who = token ? guests.accountId(token) : undefined;
+      if (who) mine = (await chain.view<string>(cfg.floor, "get_payout_address", { account_id: who })) ?? null;
+      return send(res, 200, {
+        enabled: !!evm && !!cfg.evmRpcUrl,
+        chain: evm ?? null,
+        poolAddress: cfg.evmPoolAddress || null,
+        explorer: cfg.evmExplorer,
+        myAddress: mine,
+        payouts: payouts ?? [],
+      });
+    }
+
+    if (req.method === "POST" && p === "/api/payout-address") {
+      const body = await readJson(req);
+      const { acct } = guestFrom(req, body);
+      const address = String(body.address ?? "").trim();
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw new HttpError(400, "BAD_ADDRESS", "that is not a 20-byte EVM address");
+      const r = await chain.send(acct, cfg.floor, "set_payout_address", { address }, { tgas: 30 });
+      if (!r.ok) throw new HttpError(500, "SET_FAILED", r.error ?? "could not save the address");
+      bus.emit("payout_address", { account: acct.accountId, address, tx: r.hash });
+      return send(res, 200, { ok: true, address, tx: r.hash, tx_url: chain.explorerTx(r.hash) });
+    }
+
     if (req.method === "GET" && p === "/api/policies") {
       const holder = url.searchParams.get("holder");
       const stats = await chain.view<any>(cfg.floor, "get_pool_stats");

@@ -193,3 +193,50 @@ pub struct PoolStats {
     pub locked_margin: U128,
     pub exposure_cap: U128,
 }
+
+// ------------------------------------------------------------ EVM payout leg
+/// Where a payout can be mirrored onto an EVM chain, signed by NEAR Chain Signatures.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug)]
+pub struct EvmChain {
+    pub name: String,
+    pub chain_id: u64,
+    /// ERC-20 the payout is sent in (real testnet USDC, 6 decimals like fUSDC).
+    pub token: String,
+    /// Derivation path; with the contract as caller this fixes the address the MPC will sign for.
+    pub path: String,
+    /// The MPC signer contract.
+    pub signer: AccountId,
+    /// Hard cap per payout, because the sending address is funded from a public faucet.
+    pub cap: U128,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PayoutStatus {
+    /// Created by `trigger`, waiting for someone to supply gas parameters.
+    Reserved,
+    /// The signer has been asked; the MPC may still answer even if our callback failed.
+    Signing,
+    /// We hold a signature and the executor can broadcast it.
+    Signed,
+    /// An EVM transaction hash has been reported back.
+    Confirmed,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug)]
+pub struct EvmPayout {
+    pub id: u64,
+    pub policy_id: u64,
+    /// Recipient on the EVM chain, chosen by the holder before the trigger.
+    pub to: String,
+    pub amount: U128,
+    pub status: PayoutStatus,
+    /// keccak256 of the EIP-1559 payload the contract built, hex, no 0x.
+    pub sighash: Option<String>,
+    /// Raw signer response, kept verbatim so the executor can rebuild r/s/v.
+    pub signature: Option<String>,
+    pub evm_tx: Option<String>,
+    pub nonce: Option<u64>,
+}

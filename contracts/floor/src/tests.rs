@@ -606,3 +606,208 @@ fn nobody_can_lock_the_payout_at_the_shallowest_tier_by_triggering_early() {
     assert!(early.is_err());
     assert_eq!(t.c.get_policy(1).unwrap().status, Status::Active);
 }
+
+// -------------------------------------------------------------- EVM payout leg
+
+const EVM_TOKEN: &str = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"; // Circle's Sepolia USDC
+const EVM_TO: &str = "0x525521d79134822a342d330bd91da67976569af1";
+
+fn evm_chain() -> EvmChain {
+    EvmChain {
+        name: "ethereum-sepolia".into(),
+        chain_id: 11_155_111,
+        token: EVM_TOKEN.into(),
+        path: "floor-pool-1".into(),
+        signer: acct("v1.signer-prod.testnet"),
+        cap: U128(5_000_000), // 5 USDC
+    }
+}
+
+/// Drive a policy all the way to Triggered, which is where an EVM payout gets reserved.
+fn trigger_policy(t: &mut T) {
+    active_policy(t);
+    t.price(85_000_000, T0 + 60);
+    t.price(85_000_000, T0 + 95);
+    t.at("anyone.test", T0 + 126);
+    t.c.trigger(1);
+}
+
+#[test]
+fn evm_chain_is_owner_only_and_validates_the_token() {
+    let mut t = T::new();
+    set_ctx("nobody.test", T0);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.c.set_evm_chain(evm_chain()))).is_err());
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    assert_eq!(t.c.get_evm_chain().unwrap().chain_id, 11_155_111);
+
+    let mut bad = evm_chain();
+    bad.token = "0xnope".into();
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.c.set_evm_chain(bad))).is_err());
+}
+
+#[test]
+fn holders_register_their_own_payout_address() {
+    let mut t = T::new();
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    assert_eq!(t.c.get_payout_address(acct("holder.test")).as_deref(), Some(EVM_TO));
+    assert!(t.c.get_payout_address(acct("someone-else.test")).is_none());
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.c.set_payout_address("0x123".into()))).is_err());
+}
+
+#[test]
+fn no_evm_chain_means_no_cross_chain_payout() {
+    let mut t = T::new();
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+    assert!(t.c.list_evm_payouts().is_empty(), "the NEAR payout still happens, the EVM one does not");
+}
+
+#[test]
+fn an_unregistered_holder_gets_no_cross_chain_payout() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    trigger_policy(&mut t);
+    assert!(t.c.list_evm_payouts().is_empty());
+}
+
+#[test]
+fn triggering_reserves_a_capped_cross_chain_payout() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+
+    let payouts = t.c.list_evm_payouts();
+    assert_eq!(payouts.len(), 1);
+    let po = &payouts[0];
+    assert_eq!(po.policy_id, 1);
+    assert_eq!(po.to, EVM_TO);
+    assert_eq!(po.status, PayoutStatus::Reserved);
+    // the NEAR payout was 15 fUSDC; the cross-chain leg is capped at 5
+    assert_eq!(t.c.get_policy(1).unwrap().payout_amount.0, 15_000_000);
+    assert_eq!(po.amount.0, 5_000_000, "capped by the faucet-funded sender");
+}
+
+#[test]
+fn the_contract_builds_the_signing_hash_itself_and_it_matches_viem() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+
+    set_ctx("owner.test", T0 + 130);
+    let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
+    let po = t.c.get_evm_payout(1).unwrap();
+    assert_eq!(po.status, PayoutStatus::Signing);
+    assert_eq!(po.nonce, Some(7));
+    // Same vector as evm::tests: a 5 USDC transfer on Sepolia, nonce 7, 1.5/30 gwei, 100k gas.
+    assert_eq!(
+        po.sighash.as_deref(),
+        Some("ceee0c58ebce8ab6cba8a4f507e0429956c0296b6ad8e5eaad094141c244ca2e"),
+        "the hash the MPC signs is built from contract state, not supplied by the caller"
+    );
+}
+
+#[test]
+fn signing_requests_are_owner_only_and_nonces_only_move_forward() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+
+    set_ctx("nobody.test", T0 + 130);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000)
+    }))
+    .is_err());
+
+    set_ctx("owner.test", T0 + 130);
+    let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
+    // reusing a spent nonce would let one signature replace another
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000)
+    }))
+    .is_err());
+}
+
+#[test]
+fn absurd_gas_parameters_are_refused() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+    set_ctx("owner.test", T0 + 130);
+
+    for (gas, prio, max) in [
+        (1_000u64, 1_500_000_000u128, 30_000_000_000u128), // gas limit below a bare transfer
+        (100_000, 1_500_000_000, 0),                       // zero fee: would never mine, burning a nonce
+        (100_000, 90_000_000_000, 30_000_000_000),         // priority above max
+    ] {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                t.c.request_evm_payout(1, 7, U128(prio), U128(max), gas)
+            }))
+            .is_err(),
+            "expected gas={gas} prio={prio} max={max} to be refused"
+        );
+    }
+}
+
+#[test]
+fn a_failed_signing_callback_leaves_the_payout_retryable() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+    set_ctx("owner.test", T0 + 130);
+    let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
+
+    set_ctx("floor.test", T0 + 131);
+    assert!(!t.c.on_evm_signed(1, Err(PromiseError::Failed)));
+    assert_eq!(t.c.get_evm_payout(1).unwrap().status, PayoutStatus::Signing);
+
+    // and a later success still lands
+    set_ctx("floor.test", T0 + 140);
+    let sig = serde_json::json!({ "scheme": "Secp256k1", "recovery_id": 0 });
+    assert!(t.c.on_evm_signed(1, Ok(sig)));
+    assert_eq!(t.c.get_evm_payout(1).unwrap().status, PayoutStatus::Signed);
+}
+
+#[test]
+fn confirmation_requires_a_signature_first() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0);
+    t.c.set_evm_chain(evm_chain());
+    set_ctx("holder.test", T0);
+    t.c.set_payout_address(EVM_TO.into());
+    trigger_policy(&mut t);
+
+    set_ctx("owner.test", T0 + 130);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        t.c.confirm_evm_payout(1, "0xdead".into())
+    }))
+    .is_err());
+
+    let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
+    set_ctx("floor.test", T0 + 131);
+    t.c.on_evm_signed(1, Ok(serde_json::json!({ "scheme": "Secp256k1" })));
+    set_ctx("owner.test", T0 + 132);
+    t.c.confirm_evm_payout(1, "0xfeed".into());
+    let po = t.c.get_evm_payout(1).unwrap();
+    assert_eq!(po.status, PayoutStatus::Confirmed);
+    assert_eq!(po.evm_tx.as_deref(), Some("0xfeed"));
+}

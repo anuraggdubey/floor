@@ -7,16 +7,18 @@
 //! `trigger` and the holder is paid from the solver's locked margin. No claim step. No oracle role: the price
 //! is read on-chain from the peg-pool contract by `poke`.
 
+pub mod evm;
 pub mod types;
 
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::{self, json};
-use near_sdk::store::{IterableMap, LookupSet};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{
     env, ext_contract, log, near, require, AccountId, Gas, NearToken, PanicOnDefault, Promise,
     PromiseError, PromiseOrValue,
 };
 use types::*;
+use evm::{erc20_transfer_data, hex_encode as evm_hex, parse_address, Eip1559Tx};
 
 const TGAS_TRANSFER: Gas = Gas::from_tgas(30);
 const TGAS_CALLBACK: Gas = Gas::from_tgas(15);
@@ -33,25 +35,13 @@ pub trait ExtPool {
     fn get_price_e8(&self) -> U128;
 }
 
-/// Layout of the first deployment (before `settle_secs` existed). Used only by `migrate`.
+/// The layout currently deployed on testnet, before the EVM payout leg existed. Used only by `migrate`.
 #[near(serializers = [borsh])]
-struct ParamsV1 {
-    band_e8: u64,
-    tiers: Vec<Tier>,
-    sustain_secs: u64,
-    lookback_secs: u64,
-    wait_secs: u64,
-    stale_secs: u64,
-    max_tenor_secs: u64,
-    exposure_cap: U128,
-}
-
-#[near(serializers = [borsh])]
-struct FloorV1 {
+struct FloorV2 {
     owner: AccountId,
     fusdc: AccountId,
     pool: AccountId,
-    params: ParamsV1,
+    params: Params,
     last_price_e8: u64,
     last_price_ts: u64,
     last_oob_ts: Option<u64>,
@@ -82,6 +72,14 @@ pub struct Floor {
     policies: IterableMap<u64, Policy>,
     next_policy_id: u64,
     total_exposure: u128,
+    /// Set once an EVM chain is configured; until then the cross-chain leg is simply off.
+    evm: Option<EvmChain>,
+    /// Where each holder wants an EVM payout sent. Registered before the trigger, never after.
+    evm_addr: LookupMap<AccountId, String>,
+    evm_payouts: IterableMap<u64, EvmPayout>,
+    next_evm_payout_id: u64,
+    /// Next transaction nonce for the contract-controlled EVM address; only ever moves forward.
+    evm_next_nonce: u64,
 }
 
 #[near]
@@ -106,34 +104,28 @@ impl Floor {
             policies: IterableMap::new(b"p"),
             next_policy_id: 1,
             total_exposure: 0,
+            evm: None,
+            evm_addr: LookupMap::new(b"e"),
+            evm_payouts: IterableMap::new(b"E"),
+            next_evm_payout_id: 1,
+            evm_next_nonce: 0,
         }
     }
 
     // ------------------------------------------------------------------ admin
 
-    /// One-off state upgrade from the first deployed layout (no `settle_secs`) to the current one.
-    /// Keeps every solver, margin and policy. Callable only by the contract account itself.
+    /// One-off upgrade that adds the EVM payout leg. Every solver, margin and policy carries over
+    /// untouched and the new fields start empty, so behaviour is unchanged until an EVM chain is
+    /// configured. Callable only by the contract account itself.
     #[private]
     #[init(ignore_state)]
-    pub fn migrate(settle_secs: u64) -> Self {
-        let old: FloorV1 = env::state_read().unwrap_or_else(|| env::panic_str("NO_OLD_STATE"));
-        let params = Params {
-            band_e8: old.params.band_e8,
-            tiers: old.params.tiers,
-            sustain_secs: old.params.sustain_secs,
-            settle_secs,
-            lookback_secs: old.params.lookback_secs,
-            wait_secs: old.params.wait_secs,
-            stale_secs: old.params.stale_secs,
-            max_tenor_secs: old.params.max_tenor_secs,
-            exposure_cap: old.params.exposure_cap,
-        };
-        params.validate();
+    pub fn migrate() -> Self {
+        let old: FloorV2 = env::state_read().unwrap_or_else(|| env::panic_str("NO_OLD_STATE"));
         Self {
             owner: old.owner,
             fusdc: old.fusdc,
             pool: old.pool,
-            params,
+            params: old.params,
             last_price_e8: old.last_price_e8,
             last_price_ts: old.last_price_ts,
             last_oob_ts: old.last_oob_ts,
@@ -144,6 +136,11 @@ impl Floor {
             policies: old.policies,
             next_policy_id: old.next_policy_id,
             total_exposure: old.total_exposure,
+            evm: None,
+            evm_addr: LookupMap::new(b"e"),
+            evm_payouts: IterableMap::new(b"E"),
+            next_evm_payout_id: 1,
+            evm_next_nonce: 0,
         }
     }
 
@@ -154,6 +151,133 @@ impl Floor {
         self.tier_state = vec![TierState::default(); params.tiers.len()];
         self.sustained_log.clear();
         self.params = params;
+    }
+
+
+    // -------------------------------------------------------------- EVM leg
+
+    /// Owner only. Turns on the cross-chain payout leg for one EVM chain.
+    pub fn set_evm_chain(&mut self, chain: EvmChain) {
+        require!(env::predecessor_account_id() == self.owner, "OWNER_ONLY");
+        parse_address(&chain.token); // rejects anything that is not a 20-byte hex address
+        self.evm = Some(chain);
+    }
+
+    /// Holders register where they want a cross-chain payout sent. Must be done before the trigger:
+    /// the address is read when the payout is created, so it can never be changed afterwards.
+    pub fn set_payout_address(&mut self, address: String) {
+        parse_address(&address);
+        self.evm_addr.insert(env::predecessor_account_id(), address);
+    }
+
+    pub fn get_payout_address(&self, account_id: AccountId) -> Option<String> {
+        self.evm_addr.get(&account_id).cloned()
+    }
+
+    pub fn get_evm_chain(&self) -> Option<EvmChain> {
+        self.evm.clone()
+    }
+
+    pub fn get_evm_payout(&self, payout_id: u64) -> Option<EvmPayout> {
+        self.evm_payouts.get(&payout_id).cloned()
+    }
+
+    pub fn list_evm_payouts(&self) -> Vec<EvmPayout> {
+        self.evm_payouts.iter().map(|(_, p)| p.clone()).collect()
+    }
+
+    /// Ask the NEAR MPC to sign an ERC-20 transfer for a reserved payout.
+    ///
+    /// This is Design A: the caller supplies only gas parameters and a nonce. Recipient, amount, token and
+    /// chain id all come from contract state, and the contract builds and hashes the transaction itself, so
+    /// the signature it obtains can only ever be for the payout it already owes.
+    pub fn request_evm_payout(
+        &mut self,
+        payout_id: u64,
+        nonce: u64,
+        max_priority_fee_per_gas: U128,
+        max_fee_per_gas: U128,
+        gas_limit: u64,
+    ) -> Promise {
+        require!(env::predecessor_account_id() == self.owner, "OWNER_ONLY");
+        let chain = self.evm.clone().unwrap_or_else(|| env::panic_str("NO_EVM_CHAIN"));
+        let po = self.evm_payouts.get(&payout_id).unwrap_or_else(|| env::panic_str("NO_PAYOUT")).clone();
+        require!(
+            po.status == PayoutStatus::Reserved || po.status == PayoutStatus::Signing,
+            "ALREADY_SIGNED"
+        );
+        require!(nonce >= self.evm_next_nonce, "NONCE_WENT_BACKWARDS");
+        require!(gas_limit >= 21_000 && gas_limit <= 300_000, "BAD_GAS_LIMIT");
+        require!(max_fee_per_gas.0 > 0 && max_fee_per_gas.0 <= 2_000_000_000_000u128, "BAD_MAX_FEE");
+        require!(max_priority_fee_per_gas.0 <= max_fee_per_gas.0, "BAD_PRIORITY_FEE");
+
+        let tx = Eip1559Tx {
+            chain_id: chain.chain_id,
+            nonce,
+            max_priority_fee_per_gas: max_priority_fee_per_gas.0,
+            max_fee_per_gas: max_fee_per_gas.0,
+            gas_limit,
+            to: parse_address(&chain.token),
+            value: 0,
+            data: erc20_transfer_data(parse_address(&po.to), po.amount.0),
+        };
+        let hash = evm_hex(&tx.signing_hash());
+
+        {
+            let m = self.evm_payouts.get_mut(&payout_id).unwrap();
+            m.status = PayoutStatus::Signing;
+            m.sighash = Some(hash.clone());
+            m.nonce = Some(nonce);
+        }
+        self.evm_next_nonce = nonce + 1;
+        self.emit("evm_sign_requested", json!({ "id": payout_id, "to": po.to, "amount": po.amount, "nonce": nonce, "sighash": hash }));
+
+        Promise::new(chain.signer)
+            .function_call(
+                "sign".to_string(),
+                json!({ "request": { "payload_v2": { "Ecdsa": hash }, "path": chain.path, "domain_id": 0 } })
+                    .to_string()
+                    .into_bytes(),
+                NearToken::from_yoctonear(1),
+                Gas::from_tgas(60),
+            )
+            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(15)).on_evm_signed(payout_id))
+    }
+
+    #[private]
+    pub fn on_evm_signed(
+        &mut self,
+        payout_id: u64,
+        #[callback_result] result: Result<serde_json::Value, PromiseError>,
+    ) -> bool {
+        match result {
+            Ok(sig) => {
+                let raw = sig.to_string();
+                if let Some(m) = self.evm_payouts.get_mut(&payout_id) {
+                    m.signature = Some(raw.clone());
+                    m.status = PayoutStatus::Signed;
+                }
+                self.emit("evm_signed", json!({ "id": payout_id, "signature": raw }));
+                true
+            }
+            Err(_) => {
+                // The MPC can still publish a signature after our callback fails, so the payout stays in
+                // Signing and the same nonce and fields can be requested again.
+                self.emit("evm_sign_failed", json!({ "id": payout_id }));
+                false
+            }
+        }
+    }
+
+    /// The executor reports the hash it broadcast. This is a trusted step: the contract cannot read the
+    /// other chain, so confirmation is a claim, not a proof. Said plainly in the UI and the README.
+    pub fn confirm_evm_payout(&mut self, payout_id: u64, evm_tx: String) {
+        require!(env::predecessor_account_id() == self.owner, "OWNER_ONLY");
+        let m = self.evm_payouts.get_mut(&payout_id).unwrap_or_else(|| env::panic_str("NO_PAYOUT"));
+        require!(m.status == PayoutStatus::Signed, "NOT_SIGNED");
+        m.status = PayoutStatus::Confirmed;
+        m.evm_tx = Some(evm_tx.clone());
+        self.emit("evm_confirmed", json!({ "id": payout_id, "evm_tx": evm_tx }));
     }
 
     // ---------------------------------------------------------------- solvers
@@ -314,6 +438,7 @@ impl Floor {
         pm.payout_amount = U128(amount);
         pm.owed = U128(amount);
         self.emit("policy_triggered", json!({ "id": policy_id, "tier": tier, "amount": amount.to_string() }));
+        self.reserve_evm_payout(policy_id, &p.holder, amount);
         let _ = self.pay_owed(policy_id);
         U128(amount)
     }
@@ -603,6 +728,37 @@ impl Floor {
                         .on_paid(policy_id, amount),
                 ),
         )
+    }
+
+    /// Reserve a cross-chain payout alongside the NEAR one, when a chain is configured and this holder
+    /// registered an address before the trigger. Capped, because the sending address is faucet-funded.
+    fn reserve_evm_payout(&mut self, policy_id: u64, holder: &AccountId, amount: u128) {
+        let Some(chain) = self.evm.clone() else { return };
+        let Some(to) = self.evm_addr.get(holder).cloned() else { return };
+        let send = amount.min(chain.cap.0);
+        if send == 0 {
+            return;
+        }
+        let id = self.next_evm_payout_id;
+        self.next_evm_payout_id += 1;
+        self.evm_payouts.insert(
+            id,
+            EvmPayout {
+                id,
+                policy_id,
+                to: to.clone(),
+                amount: U128(send),
+                status: PayoutStatus::Reserved,
+                sighash: None,
+                signature: None,
+                evm_tx: None,
+                nonce: None,
+            },
+        );
+        self.emit(
+            "evm_payout_reserved",
+            json!({ "id": id, "policy_id": policy_id, "to": to, "amount": send.to_string(), "chain": chain.name }),
+        );
     }
 
     fn reject(&self, code: &str, who: &AccountId, amount: U128) -> PromiseOrValue<U128> {

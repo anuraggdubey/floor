@@ -8,6 +8,7 @@ import { useFloor, useScene } from "@/lib/useFloor";
 import { useGuest } from "@/lib/useGuest";
 import { price as fmtPrice, usdc, tierPrice } from "@/lib/api";
 import { BuyPanel, DumpPanel, PolicyList, Feed } from "./Panels";
+import { EvmPanel } from "./EvmPanel";
 
 export function PlayClient() {
   const guest = useGuest();
@@ -203,6 +204,7 @@ export function PlayClient() {
               <BuyPanel live={live} guest={guest} />
               <DumpPanel live={live} guest={guest} />
               <PolicyList policies={mine} mine={guest.accountId} />
+              <EvmPanel live={live} guest={guest} />
               <Feed live={live} />
             </>
           )}

@@ -133,7 +133,43 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
+export interface EvmChainInfo {
+  name: string;
+  chain_id: number;
+  token: string;
+  path: string;
+  signer: string;
+  cap: string;
+}
+
+export interface EvmPayout {
+  id: number;
+  policy_id: number;
+  to: string;
+  amount: string;
+  status: "Reserved" | "Signing" | "Signed" | "Confirmed";
+  sighash: string | null;
+  signature: string | null;
+  evm_tx: string | null;
+  nonce: number | null;
+}
+
+export interface EvmView {
+  enabled: boolean;
+  chain: EvmChainInfo | null;
+  poolAddress: string | null;
+  explorer: string;
+  myAddress: string | null;
+  payouts: EvmPayout[];
+}
+
 export const api = {
+  evm: () => call<EvmView>("/api/evm"),
+  setPayoutAddress: (address: string) =>
+    call<{ ok: boolean; address: string; tx: string; tx_url: string }>("/api/payout-address", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    }),
   state: () => call<FloorState>("/api/state"),
   me: () => call<{ accountId: string; balances: Balances }>("/api/me"),
   guest: () => call<{ token: string; accountId: string; balances: Balances }>("/api/guest", { method: "POST" }),
