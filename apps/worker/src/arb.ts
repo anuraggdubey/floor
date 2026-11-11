@@ -43,12 +43,16 @@ export function startArb(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
   let breachSince: number | null = null;
   let busy = false;
   let enabled = true;
+  /** When our last buy went out. The price feed polls every few seconds, so acting again on a snapshot older
+   *  than this would size the next buy from reserves we have already changed, and overshoot the peg. */
+  let lastBuyAt = 0;
 
   async function tick() {
     if (busy || !enabled) return;
     const snap = feed.latest;
     if (!snap) return;
     const now = Date.now();
+    if (snap.t <= lastBuyAt + 1500) return; // wait for a price that reflects our last buy
     if (snap.price_e8 >= BAND_E8) {
       breachSince = null;
       return;
@@ -61,6 +65,7 @@ export function startArb(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
       if (need === 0n) return;
       const step = need < maxSwap(BigInt(snap.reserve_usd)) ? need : maxSwap(BigInt(snap.reserve_usd));
       const r = await chain.send(acct, cfg.pool, "buy_dusd", { amount: step.toString() }, { tgas: 30 });
+      lastBuyAt = Date.now();
       bus.emit("arb", { ok: r.ok, spent_usd: step.toString(), tx: r.hash, error: r.error });
     } finally {
       busy = false;

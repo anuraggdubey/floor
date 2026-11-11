@@ -31,6 +31,35 @@ export function toBase(x: unknown, decimals = 6): bigint {
   return BigInt(i! + f.padEnd(decimals, "0").slice(0, decimals));
 }
 
+/** Sender balances on the EVM chain, via plain JSON-RPC (no viem), cached so the UI can poll freely. */
+let fundingCache: { at: number; usdc: string; eth: string } | null = null;
+async function evmFunding(cfg: Cfg, token: string): Promise<{ usdc: string; eth: string } | null> {
+  if (!cfg.evmRpcUrl || !cfg.evmPoolAddress) return null;
+  if (fundingCache && Date.now() - fundingCache.at < 20_000) return fundingCache;
+  const rpc = async (method: string, params: unknown[]) => {
+    const r = await fetch(cfg.evmRpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const j = (await r.json()) as { result?: string; error?: unknown };
+    if (j.error || !j.result) throw new Error("rpc");
+    return j.result;
+  };
+  try {
+    const addr = cfg.evmPoolAddress.toLowerCase().replace(/^0x/, "");
+    const [eth, usdc] = await Promise.all([
+      rpc("eth_getBalance", [cfg.evmPoolAddress, "latest"]),
+      rpc("eth_call", [{ to: token, data: "0x70a08231" + "0".repeat(24) + addr }, "latest"]),
+    ]);
+    fundingCache = { at: Date.now(), eth: BigInt(eth).toString(), usdc: BigInt(usdc).toString() };
+    return fundingCache;
+  } catch {
+    return fundingCache; // stale is better than nothing
+  }
+}
+
 export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: PriceFeed; bots: Bots; guests: Guests; keeper: Keeper; arb: Arb }) {
   const { chain, cfg, bus, feed, bots, guests, keeper, arb } = deps;
   const rfqs = new Map<string, { holder: string; offers: SignedOffer[]; at: number }>();
@@ -135,7 +164,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache, no-transform", connection: "keep-alive" });
       const write = (kind: string, data: unknown) => res.write(`data: ${JSON.stringify({ kind, data })}\n\n`);
       write("snapshot", { price: feed.latest ?? null, gate: feed.gate ?? null, events: bus.recent.slice(-50) });
-      const unsub = bus.subscribe((ev) => write(ev.kind, { ...ev.data, ts: ev.ts, id: ev.id }));
+      const unsub = bus.subscribe((ev) => write(ev.kind, { ...ev.data, ts: ev.ts, eid: ev.id }));
       const hb = setInterval(() => res.write(": hb\n\n"), 15_000);
       req.on("close", () => {
         clearInterval(hb);
@@ -257,6 +286,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
         chain: evm ?? null,
         poolAddress: cfg.evmPoolAddress || null,
         explorer: cfg.evmExplorer,
+        funding: evm ? await evmFunding(cfg, evm.token) : null,
         myAddress: mine,
         payouts: payouts ?? [],
       });

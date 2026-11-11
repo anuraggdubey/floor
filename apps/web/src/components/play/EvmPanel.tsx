@@ -39,7 +39,7 @@ export function EvmPanel({ live, guest }: { live: Live; guest: Guest }) {
 
   if (!view?.enabled || !view.chain) return null;
 
-  const mine = view.payouts.filter((p) => !view.myAddress || p.to.toLowerCase() === view.myAddress.toLowerCase());
+  const mine = view.myAddress ? view.payouts.filter((p) => p.to.toLowerCase() === view.myAddress!.toLowerCase()) : [];
 
   async function save() {
     setBusy(true);

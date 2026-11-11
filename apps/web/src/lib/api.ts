@@ -159,6 +159,8 @@ export interface EvmView {
   chain: EvmChainInfo | null;
   poolAddress: string | null;
   explorer: string;
+  /** Balances of the contract-controlled sender (USDC has 6 decimals, ETH is in wei); null if unreadable. */
+  funding?: { usdc: string; eth: string } | null;
   myAddress: string | null;
   payouts: EvmPayout[];
 }

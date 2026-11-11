@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { Diorama } from "@/components/Diorama";
 import { useFloor, useScene } from "@/lib/useFloor";
@@ -9,6 +9,10 @@ import { useGuest } from "@/lib/useGuest";
 import { price as fmtPrice, usdc, tierPrice } from "@/lib/api";
 import { BuyPanel, DumpPanel, PolicyList, Feed } from "./Panels";
 import { EvmPanel } from "./EvmPanel";
+import { DirectorOverlay } from "./DirectorOverlay";
+import { Odometer } from "@/components/Odometer";
+import { useDirector } from "@/lib/useDirector";
+import { useSound } from "@/lib/sfx";
 
 export function PlayClient() {
   const guest = useGuest();
@@ -17,7 +21,21 @@ export function PlayClient() {
     () => live.policies.filter((p) => !guest.accountId || p.holder === guest.accountId),
     [live.policies, guest.accountId],
   );
-  const scene = useScene(live, mine.length ? mine : undefined);
+  const baseScene = useScene(live, mine.length ? mine : undefined);
+
+  // every dump drops a block into the reservoir; remember the recent ones so each gets its own splash
+  const [impacts, setImpacts] = useState<number[]>([]);
+  useEffect(() => {
+    if (!live.shockAt) return;
+    setImpacts((xs) => [...xs.filter((t) => Date.now() - t < 3000), live.shockAt as number]);
+  }, [live.shockAt]);
+  const scene = useMemo(() => ({ ...baseScene, impacts }), [baseScene, impacts]);
+
+  const sfx = useSound();
+  const director = useDirector({ guest, live, play: sfx.play });
+  const showDirector = director.view.running || director.view.done || !!director.view.error;
+  const [dismissed, setDismissed] = useState(false);
+  const overlayOn = showDirector && !dismissed;
 
   const p = live.price ? live.price.price_e8 / 1e8 : 1;
   const gate = live.gate;
@@ -36,7 +54,12 @@ export function PlayClient() {
       ? Math.max(0, gate.last_out_of_band_ts + params.lookback_secs - now)
       : 0;
 
-  const gateLabel = gate?.open
+  // The gate flag trails the price by a few seconds (it is only refreshed when the keeper pokes), so call a
+  // broken peg what it is straight away instead of showing "on sale" next to a crashing price.
+  const sellable = !!gate?.open && !broken;
+  const gateLabel = gate?.open && broken
+    ? "Peg under stress — gate closing"
+    : gate?.open
     ? "Cover on sale"
     : gate?.reason === "STALE_PRICE"
       ? "Waiting for a price…"
@@ -61,7 +84,25 @@ export function PlayClient() {
     return () => clearTimeout(t);
   }, [live.paidAt]);
 
-  const paidTotal = mine
+  // cues follow the live stream, so the same sounds play whether you drive it or the director does
+  useEffect(() => {
+    if (live.shockAt) sfx.play("dump");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.shockAt]);
+  useEffect(() => {
+    if (live.paidAt) sfx.play("paid");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.paidAt]);
+  const wasOpen = useRef<boolean | null>(null);
+  useEffect(() => {
+    const open = gate?.open;
+    if (open === undefined) return;
+    if (wasOpen.current === true && open === false) sfx.play("gate");
+    wasOpen.current = open;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate?.open]);
+
+  const paidTotal = (guest.accountId ? mine : [])
     .filter((x) => x.status === "PaidOut" || x.status === "Triggered")
     .reduce((a, x) => a + Number(x.payout_amount), 0);
 
@@ -87,6 +128,25 @@ export function PlayClient() {
           </Link>
 
           <div className="flex items-center gap-2 md:gap-4">
+            <button
+              onClick={() => {
+                setDismissed(false);
+                void director.start();
+              }}
+              disabled={director.view.running}
+              className="group bg-blue hover:bg-blue-lit relative overflow-hidden rounded-full px-4 py-1.5 text-[0.8125rem] font-medium text-white transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" fill="currentColor" aria-hidden="true">
+                  <path d="M2 1l7 4-7 4z" />
+                </svg>
+                {director.view.running ? "Running…" : "Watch it happen"}
+              </span>
+              <span
+                className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+                aria-hidden="true"
+              />
+            </button>
             {guest.accountId ? (
               <>
                 <div className="hidden items-baseline gap-2 sm:flex">
@@ -119,11 +179,33 @@ export function PlayClient() {
       {/* ---------------------------------------------------------------- body */}
       <div className="grid flex-1 lg:grid-cols-[1fr_26rem]">
         {/* the world */}
-        <div className="relative min-h-[58svh] lg:min-h-0">
-          <Diorama scene={scene} className="absolute inset-0 h-full w-full" scale={0.96} yOffset={0.01} />
+        <div className="relative min-h-[58svh] lg:sticky lg:top-14 lg:h-[calc(100svh-3.5rem)] lg:min-h-0 lg:self-start">
+          <Diorama
+            scene={scene}
+            className="absolute inset-0 h-full w-full"
+            scale={0.96}
+            yOffset={0.01}
+            camera={overlayOn ? director.view.camera : undefined}
+            parallax
+          />
+          <DirectorOverlay
+            view={overlayOn ? director.view : { ...director.view, running: false, done: false, error: null }}
+            onStop={director.stop}
+            onRestart={() => {
+              setDismissed(false);
+              void director.start();
+            }}
+            onClose={() => setDismissed(true)}
+            soundOn={sfx.on}
+            onToggleSound={sfx.toggle}
+          />
 
           {/* peg readout */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4 md:p-6">
+          <div
+            className={`pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4 transition-[padding] duration-700 md:p-6 ${
+              overlayOn ? "pt-14 md:pt-16" : ""
+            }`}
+          >
             <div>
               <p className="kicker">Peg</p>
               <p
@@ -131,11 +213,11 @@ export function PlayClient() {
                   broken ? "text-blood" : "text-bone"
                 }`}
               >
-                ${fmtPrice(live.price?.price_e8 ?? 1e8)}
+                $<Odometer value={fmtPrice(live.price?.price_e8 ?? 1e8)} />
               </p>
               <p
                 className={`mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[0.75rem] ${
-                  gate?.open ? "border-mint/40 bg-mint/10 text-mint" : "border-blood/40 bg-blood/10 text-blood"
+                  sellable ? "border-mint/40 bg-mint/10 text-mint" : "border-blood/40 bg-blood/10 text-blood"
                 }`}
               >
                 {gateLabel}
@@ -179,7 +261,11 @@ export function PlayClient() {
         </div>
 
         {/* the controls */}
-        <aside className="border-line/70 bg-ink-2/30 space-y-3 border-t p-4 lg:overflow-y-auto lg:border-t-0 lg:border-l">
+        <aside
+          className={`border-line/70 bg-ink-2/30 space-y-3 border-t p-4 transition-opacity duration-500 lg:overflow-y-auto lg:border-t-0 lg:border-l ${
+            director.view.running ? "pointer-events-none opacity-40" : ""
+          }`}
+        >
           {!guest.accountId ? (
             <div className="border-line/80 bg-ink-2/70 rounded-xl border p-6">
               <h2 className="display-md">Step inside.</h2>
@@ -193,6 +279,15 @@ export function PlayClient() {
                 className="bg-blue hover:bg-blue-lit mt-5 w-full rounded-lg py-3.5 text-[1rem] font-medium text-white transition-colors disabled:opacity-50"
               >
                 {guest.loading ? "Creating your account…" : "Give me an account"}
+              </button>
+              <button
+                onClick={() => {
+                  setDismissed(false);
+                  void director.start();
+                }}
+                className="border-line hover:border-blue/70 hover:bg-blue/10 mt-2.5 w-full rounded-lg border py-3.5 text-[1rem] font-medium transition-colors"
+              >
+                Or just watch it happen
               </button>
               {guest.error && <p className="text-blood mt-3 text-[0.875rem]">{guest.error}</p>}
               <p className="text-mute/60 mt-4 text-[0.75rem]">

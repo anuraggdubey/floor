@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isqrt, maxSwap, usdNeededToRestore } from "../src/arb.js";
 import { deepestTier, planActions, type PolicyView } from "../src/keeper.js";
 import { decrypt, encrypt } from "../src/guests.js";
-import { parseEvents } from "../src/chain.js";
+import { isRateLimited, parseEvents } from "../src/chain.js";
 import { Bus } from "../src/events.js";
 import { toBase } from "../src/server.js";
 
@@ -114,5 +114,17 @@ describe("event bus", () => {
     b.emit("price", {}, false);
     for (let i = 0; i < 5; i++) b.emit("x", { i });
     expect(b.recent.map((e) => e.data.i)).toEqual([2, 3, 4]);
+  });
+});
+
+describe("rate-limit detection", () => {
+  it("recognises the throttling responses the public RPCs actually send", () => {
+    expect(isRateLimited(new Error('{"jsonrpc": "2.0", "error": {"code": -429, "message": "Rate limits exceeded."}}'))).toBe(true);
+    expect(isRateLimited(new Error("HTTP 429 Too Many Requests"))).toBe(true);
+    expect(isRateLimited(new Error("rate limit exceeded"))).toBe(true);
+  });
+  it("does not mistake a real contract failure for throttling", () => {
+    expect(isRateLimited(new Error("Smart contract panicked: GATE_CLOSED"))).toBe(false);
+    expect(isRateLimited(new Error("account does not exist"))).toBe(false);
   });
 });

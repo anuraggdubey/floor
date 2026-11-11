@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, GUEST_KEY, type Balances } from "./api";
+import { api, ApiError, GUEST_KEY, type Balances } from "./api";
 
 export interface Guest {
   accountId: string | null;
@@ -9,7 +9,7 @@ export interface Guest {
   loading: boolean;
   error: string | null;
   /** Create a testnet sub-account for this visitor (custodial, testnet only). */
-  start: () => Promise<void>;
+  start: () => Promise<string | null>;
   topUp: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -27,10 +27,13 @@ export function useGuest(): Guest {
       const me = await api.me();
       setAccountId(me.accountId);
       setBalances(me.balances);
-    } catch {
-      // the worker restarted and lost this token: drop it so the visitor can start again
-      localStorage.removeItem(GUEST_KEY);
-      setAccountId(null);
+    } catch (e) {
+      // Only forget the account when the worker positively says it does not know this token. A timeout, a
+      // rate limit or a restart in progress must not log the visitor out of a demo halfway through.
+      if (e instanceof ApiError && e.code === "NO_GUEST") {
+        localStorage.removeItem(GUEST_KEY);
+        setAccountId(null);
+      }
     }
   }, []);
 
@@ -41,11 +44,11 @@ export function useGuest(): Guest {
   // keep balances honest while the demo runs
   useEffect(() => {
     if (!accountId) return;
-    const t = setInterval(() => void refresh(), 6000);
+    const t = setInterval(() => void refresh(), 12000);
     return () => clearInterval(t);
   }, [accountId, refresh]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (): Promise<string | null> => {
     setLoading(true);
     setError(null);
     try {
@@ -53,8 +56,10 @@ export function useGuest(): Guest {
       localStorage.setItem(GUEST_KEY, g.token);
       setAccountId(g.accountId);
       setBalances(g.balances);
+      return g.accountId;
     } catch (e) {
       setError((e as Error).message);
+      return null;
     } finally {
       setLoading(false);
     }

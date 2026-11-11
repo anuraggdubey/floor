@@ -18,7 +18,12 @@ export function Panel({
 }) {
   return (
     <section
-      className={`rounded-xl border p-5 ${
+      onPointerMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+      }}
+      className={`glow rounded-xl border p-5 transition-colors duration-500 ${
         tone === "danger" ? "border-blood/30 bg-blood/[0.04]" : "border-line/80 bg-ink-2/70"
       }`}
     >
@@ -304,7 +309,11 @@ export function Feed({ live }: { live: Live }) {
       ) : (
         <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
           {live.feed.map((f) => (
-            <li key={f.id} className="flex gap-2.5 text-[0.8125rem] leading-snug">
+            <li
+              key={f.id}
+              className="flex gap-2.5 rounded px-1 text-[0.8125rem] leading-snug"
+              style={{ animation: "feed-in 0.5s var(--ease-out-quint) both, flash-up 1.2s ease-out both" }}
+            >
               <span className="text-mute/50 tnum shrink-0 text-[0.6875rem] leading-5">
                 {new Date(f.ts).toLocaleTimeString("en-GB", { hour12: false }).slice(0, 8)}
               </span>

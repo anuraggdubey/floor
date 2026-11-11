@@ -28,6 +28,7 @@ export function Hero() {
         scale={0.66}
         xOffset={0.2}
         yOffset={0.08}
+        parallax
       />
       {/* just enough scrim to hold the type, not enough to hide the ground */}
       <div className="from-ink via-ink/60 pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r to-transparent" />

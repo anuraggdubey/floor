@@ -34,6 +34,8 @@ export interface SceneState {
   paidAt: number | null;
   /** Timestamp (ms) of the last dump, for the shockwave. */
   shockAt: number | null;
+  /** Timestamps (ms) of recent dumps; each one drops a block into the reservoir and splashes. */
+  impacts?: number[];
 }
 
 export const emptyScene: SceneState = {
@@ -145,7 +147,9 @@ export function drawScene(
   drawHouses(ctx, v, s, t, paid);
   if (anySustained) drawCracks(ctx, v, t, stress);
   drawEmbers(ctx, v, t, stress);
+  for (const at of s.impacts ?? []) if (tMs - at < 2400) drawImpact(ctx, v, tMs - at, at, waterZ);
   if (paid > 0) drawPayoutBurst(ctx, v, paid);
+  if (s.paidAt && tMs - s.paidAt < 4200) drawCoins(ctx, v, s, tMs - s.paidAt);
 
   ctx.restore();
 
@@ -654,5 +658,111 @@ function drawPayoutBurst(ctx: CanvasRenderingContext2D, v: View, k: number) {
   g.addColorStop(1, "rgba(255,207,110,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------ effects
+/**
+ * A dump, made visible: a hot block falls out of the sky into the reservoir, hits the surface, throws up
+ * droplets and sends rings across the water. Deterministic per impact, so replays look identical.
+ */
+function drawImpact(ctx: CanvasRenderingContext2D, v: View, ageMs: number, seed: number, waterZ: number) {
+  const cx = (B0 + B1) / 2;
+  const cy = (B0 + B1) / 2;
+  const FALL = 380;
+
+  if (ageMs < FALL) {
+    // fall: accelerating, with a streak behind it
+    const k = ageMs / FALL;
+    const z = lerp(8.5, waterZ, k * k);
+    const [px, py] = iso(v, cx, cy, z);
+    const [tx, ty] = iso(v, cx, cy, z + 2.2);
+    const g = ctx.createLinearGradient(tx, ty, px, py);
+    g.addColorStop(0, "rgba(255,120,80,0)");
+    g.addColorStop(1, "rgba(255,150,90,0.85)");
+    ctx.save();
+    ctx.strokeStyle = g;
+    ctx.lineWidth = Math.max(3, v.tw * 0.16);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+    ctx.fillStyle = "#ffb27a";
+    ctx.shadowColor = "#ff5a3c";
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(4, v.tw * 0.13), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const a = (ageMs - FALL) / 1000; // seconds since the splash
+  const [sx, sy] = iso(v, cx, cy, waterZ);
+
+  // rings spreading over the surface
+  ctx.save();
+  for (let r = 0; r < 3; r++) {
+    const ra = a - r * 0.16;
+    if (ra <= 0) continue;
+    const life = clamp(ra / 1.5, 0, 1);
+    ctx.globalAlpha = (1 - life) * 0.7;
+    ctx.strokeStyle = r === 0 ? "#ffd9c4" : "#a8c8ff";
+    ctx.lineWidth = 2.4 - life * 1.6;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, v.tw * (0.3 + life * 2.6), v.th * (0.3 + life * 2.6), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // droplets on ballistic arcs
+  ctx.save();
+  for (let i = 0; i < 18; i++) {
+    const ang = rnd(seed + i * 3.1) * Math.PI * 2;
+    const speed = 1.1 + rnd(seed + i * 7.7) * 2.3;
+    const up = 2.2 + rnd(seed + i * 5.3) * 3.4;
+    const lt = a;
+    const z = up * lt - 4.8 * lt * lt;
+    if (z < -0.05 && lt > 0.15) continue;
+    const dx = Math.cos(ang) * speed * lt;
+    const dy = Math.sin(ang) * speed * lt;
+    const [px, py] = iso(v, cx + dx, cy + dy, waterZ + Math.max(0, z));
+    ctx.globalAlpha = clamp(1 - lt / 1.2, 0, 1) * 0.9;
+    ctx.fillStyle = i % 3 === 0 ? "#ffd2b8" : "#9cc2ff";
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(1.4, v.tw * 0.035), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Gold coins that pop out of every paid house and tumble down, for a few seconds after a payout. */
+function drawCoins(ctx: CanvasRenderingContext2D, v: View, s: SceneState, ageMs: number) {
+  const a = ageMs / 1000;
+  ctx.save();
+  s.houses.slice(0, HOUSE_SPOTS.length).forEach((house, hi) => {
+    if (house.state !== "paid") return;
+    const [x, y] = HOUSE_SPOTS[hi]!;
+    for (let i = 0; i < 9; i++) {
+      const delay = rnd(hi * 31 + i) * 0.7;
+      const lt = a - delay;
+      if (lt < 0 || lt > 2.2) continue;
+      const ang = rnd(hi * 17 + i * 5) * Math.PI * 2;
+      const sp = 0.5 + rnd(hi * 13 + i * 9) * 1.1;
+      const up = 3.4 + rnd(hi * 7 + i) * 2.2;
+      const z = 1.05 + up * lt - 5.2 * lt * lt;
+      const [px, py] = iso(v, x + 0.47 + Math.cos(ang) * sp * lt, y + 0.47 + Math.sin(ang) * sp * lt, Math.max(0.05, z));
+      const spin = Math.abs(Math.cos(lt * 9 + i)); // a coin turning edge-on and back
+      ctx.globalAlpha = clamp(1 - lt / 2.2, 0, 1);
+      ctx.fillStyle = "#ffcf6e";
+      ctx.strokeStyle = "#a8781a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(px, py, Math.max(2, v.tw * 0.055), Math.max(1, v.tw * 0.055 * spin), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  });
   ctx.restore();
 }
