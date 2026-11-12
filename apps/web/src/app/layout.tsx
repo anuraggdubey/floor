@@ -8,7 +8,11 @@ const grotesk = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-grotes
 const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", variable: "--font-serif", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://floorxa.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
+  applicationName: "Floor",
   title: "Floor — depeg cover you can break yourself",
   description:
     "A depeg cover market on NEAR. Solvers compete to back your cover with their own margin; when the peg breaks for long enough, the contract pays you. Break the peg yourself and watch it happen.",
@@ -16,6 +20,12 @@ export const metadata: Metadata = {
     title: "Floor — depeg cover you can break yourself",
     description: "Break the peg yourself and watch the cover pay. Built on NEAR.",
     type: "website",
+    siteName: "Floor",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Floor — depeg cover you can break yourself",
+    description: "Break the peg yourself and watch the cover pay. Built on NEAR.",
   },
 };
 

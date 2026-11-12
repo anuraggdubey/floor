@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Live demo** | ADD_LIVE_DEMO_URL |
+| **Live demo** | https://floorxa.vercel.app |
 | **Demo video (2:19)** | ADD_VIDEO_URL |
 | **Demo post on X** | ADD_X_POST_URL |
 | **Network** | NEAR testnet (+ Ethereum Sepolia for the cross-chain payout) |
