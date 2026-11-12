@@ -222,7 +222,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
         gate: q.gate,
         price_e8: q.price_e8,
         best,
-        offers: q.offers.map((o) => ({ solver: o.solver, name: o.name, strategy: o.strategy, scripted: true, premium: o.premium, max_payout: o.max_payout, capacity: o.capacity, expires_ts: o.expires_ts })),
+        offers: q.offers.map((o) => ({ solver: o.solver, name: o.name, strategy: o.strategy, scripted: !o.ai, ai: o.ai, thought: o.thought, latency_ms: o.latency_ms, premium: o.premium, max_payout: o.max_payout, capacity: o.capacity, expires_ts: o.expires_ts })),
         declined: q.declined,
       });
     }

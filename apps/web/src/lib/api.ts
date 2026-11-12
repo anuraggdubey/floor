@@ -82,6 +82,9 @@ export interface Offer {
   name: string;
   strategy: string;
   scripted: boolean;
+  ai?: boolean;
+  thought?: string | null;
+  latency_ms?: number | null;
   premium: string;
   max_payout: string;
   capacity: string;
@@ -94,7 +97,7 @@ export interface RfqResult {
   price_e8: number;
   best: string | null;
   offers: Offer[];
-  declined: Array<{ solver: string; name: string; reason: string }>;
+  declined: Array<{ solver: string; name: string; reason: string; ai?: boolean; thought?: string | null }>;
 }
 
 export interface Balances {

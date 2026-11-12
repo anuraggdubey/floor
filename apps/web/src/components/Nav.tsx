@@ -27,6 +27,9 @@ export function Nav({ cta = { href: "/play", label: "Break the peg" } }: { cta?:
         </Link>
 
         <div className="hidden items-center gap-8 text-[0.9375rem] text-mute md:flex">
+          <Link href="/time-machine" className="text-amber transition-colors hover:text-bone">
+            Time machine
+          </Link>
           <a href="#how" className="transition-colors hover:text-bone">
             How it works
           </a>

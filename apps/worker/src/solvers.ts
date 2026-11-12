@@ -42,7 +42,7 @@ export function worstDeviationBps(history_e8: number[]): number {
   return history_e8.reduce((w, p) => Math.max(w, deviationBps(p)), 0);
 }
 
-function premiumFromBps(notional: bigint, bps: number, tenor_secs: number): bigint {
+export function premiumFromBps(notional: bigint, bps: number, tenor_secs: number): bigint {
   // bps is the premium per 5 minutes of tenor; scale linearly, minimum 1 base unit.
   const scaled = (notional * BigInt(Math.round(bps * 100)) * BigInt(tenor_secs)) / (10_000n * 100n * 300n);
   return scaled > 0n ? scaled : 1n;

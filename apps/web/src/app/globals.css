@@ -290,3 +290,12 @@ html.lenis body {
 .glow:hover::before {
   opacity: 1;
 }
+
+/* Time machine */
+@keyframes tm-shake { 0%,100% { transform: translate(0,0) } 20% { transform: translate(-2px,1px) } 40% { transform: translate(2px,-1px) } 60% { transform: translate(-1px,-2px) } 80% { transform: translate(1px,2px) } }
+.tm-shake { animation: tm-shake 0.35s linear infinite; }
+@keyframes tm-stamp { 0% { transform: scale(2.2) rotate(-6deg); opacity: 0 } 60% { transform: scale(0.95) rotate(-3deg); opacity: 1 } 100% { transform: scale(1) rotate(-2deg) } }
+.tm-stamp { display: inline-block; animation: tm-stamp 0.35s var(--ease-out-quint) both; }
+@keyframes tm-pop { 0% { opacity: 0; transform: scale(0.8) } 100% { opacity: 1; transform: scale(1) } }
+.tm-pop > div { animation: tm-pop 0.6s var(--ease-out-quint) both; }
+@media (prefers-reduced-motion: reduce) { .tm-shake, .tm-stamp, .tm-pop > div { animation: none; } }

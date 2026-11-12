@@ -141,7 +141,10 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
                     <span className="bg-mint/15 text-mint rounded px-1.5 py-0.5 text-[0.625rem]">BEST</span>
                   )}
                 </p>
-                <p className="text-mute/70 truncate font-mono text-[0.6875rem]">{o.solver}</p>
+                <p className="text-mute/70 truncate font-mono text-[0.6875rem]">
+                  {o.ai ? <span className="text-blue-lit">AI agent · {o.latency_ms}ms</span> : "scripted"} · {o.solver}
+                </p>
+                {o.thought && <p className="text-bone/75 mt-1.5 text-[0.8125rem] leading-snug italic">“{o.thought}”</p>}
               </div>
               <div className="shrink-0 text-right">
                 <p className="tnum text-[1.0625rem] leading-tight">{usdc(o.premium)}</p>
@@ -152,7 +155,7 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
           {rfq.declined.map((d) => (
             <div key={d.solver} className="border-line/60 rounded-lg border border-dashed p-3">
               <p className="text-mute text-[0.875rem]">
-                <span className="text-bone/70">{d.name}</span> declined — {d.reason}
+                <span className="text-bone/70">{d.name}</span>{d.ai && <span className="text-blue-lit"> (AI agent)</span>} declined — {d.reason}
               </p>
             </div>
           ))}
