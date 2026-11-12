@@ -118,9 +118,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Base URL of the worker API. Empty (default) means same origin: `next dev` proxies /api to the worker. In a hosted
+ * deployment set NEXT_PUBLIC_API_URL to the worker URL so the browser (and the SSE stream) talk to it directly.
+ */
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem(GUEST_KEY) : null;
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     ...init,
     headers: {
       "content-type": "application/json",

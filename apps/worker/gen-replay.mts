@@ -64,7 +64,11 @@ for (const i of picks) {
     SOLVERS.map(async (s) => {
       const r = { notional: NOTIONAL, tenor_secs: TENOR };
       const gateClosed = m.price_e8 < BAND;
-      const d = agent ? await askUnderwriter(agent, s.key, m, r, 1_000_000_000n) : null;
+      let d = null;
+      for (let a = 0; agent && !d && a < 4; a++) {
+        if (a) await new Promise((res) => setTimeout(res, 2500 * a));
+        d = await askUnderwriter(agent, s.key, m, r, 1_000_000_000n);
+      }
       if (d) {
         const quote = d.quote && !gateClosed;
         return {

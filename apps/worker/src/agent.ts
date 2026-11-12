@@ -45,14 +45,14 @@ export interface AgentDecision {
 }
 
 export const BPS_MIN = 40;
-export const BPS_MAX = 2000;
+export const BPS_MAX = 400;
 
 export function agentCfgFromEnv(env: NodeJS.ProcessEnv = process.env): AgentCfg | null {
   const apiKey = env.GROQ_API_KEY;
   if (!apiKey) return null;
   return {
     apiKey,
-    model: env.GROQ_MODEL || "llama-3.3-70b-versatile",
+    model: env.GROQ_MODEL || "openai/gpt-oss-120b",
     baseUrl: env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
     timeoutMs: Number(env.GROQ_TIMEOUT_MS || 7000),
   };
@@ -77,7 +77,7 @@ function summarise(m: Market, r: Request, freeMargin: bigint): string {
 
 const SYSTEM = `You underwrite stablecoin depeg cover on a live market. Reply with ONE JSON object and nothing else:
 {"decision":"quote"|"refuse","bps":<integer>,"thought":"<1-2 plain sentences, max 220 characters, first person, say WHY>"}
-"bps" is your premium in basis points of notional per 5 minutes of tenor. Typical range 60-600; go higher when risk is higher. Never exceed ${BPS_MAX}. If you refuse, set bps to 0. Do not use markdown.`;
+"bps" is your premium in basis points of notional per 5 minutes of tenor. Typical range 60-300; go higher when risk is higher. Never exceed ${BPS_MAX}. If you refuse, set bps to 0. Do not use markdown.`;
 
 /** Pure: pulls a decision out of a model reply; returns null when it cannot be trusted. */
 export function parseDecision(text: string): { quote: boolean; bps: number; thought: string } | null {
@@ -122,7 +122,8 @@ export async function askUnderwriter(
       body: JSON.stringify({
         model: cfg.model,
         temperature: 0.4,
-        max_tokens: 220,
+        max_tokens: 700,
+        reasoning_effort: "low",
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: `${persona.style}\n\n${SYSTEM}` },

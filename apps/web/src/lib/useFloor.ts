@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type FloorState, type Gate, type Policy, type PricePoint } from "./api";
+import { api, API_BASE, type FloorState, type Gate, type Policy, type PricePoint } from "./api";
 import type { SceneState, Tier } from "./diorama";
 
 export interface FeedItem {
@@ -77,7 +77,7 @@ export function useFloor(holder?: string | null): Live {
   }, [refresh]);
 
   useEffect(() => {
-    const es = new EventSource("/api/stream");
+    const es = new EventSource(`${API_BASE}/api/stream`);
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (ev) => {

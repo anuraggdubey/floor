@@ -56,7 +56,8 @@ export function loadConfig(): Cfg {
   // failing over to it only replaces a real error with a misleading one. See https://docs.near.org/api/rpc/providers
   const rpc = opt("NEAR_RPC_URL", "https://test.rpc.fastnear.com");
   return {
-    port: Number(opt("WORKER_PORT", "8787")),
+    // Hosts such as Render inject PORT; WORKER_PORT wins locally.
+    port: Number(opt("WORKER_PORT", opt("PORT", "8787"))),
     // two endpoints so reads can be spread; free tiers rate-limit a single host quickly
     rpcUrls: [rpc, "https://test.rpc.fastnear.com", "https://archival-rpc.testnet.fastnear.com"].filter(
       (v, i, a) => a.indexOf(v) === i,

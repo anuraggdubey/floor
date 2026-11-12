@@ -85,3 +85,5 @@ raw-footage/
 # ---------- agent / tooling scratch ----------
 .claude/settings.local.json
 .claude/scratch/
+
+video/
