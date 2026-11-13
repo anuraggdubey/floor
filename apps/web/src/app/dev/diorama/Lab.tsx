@@ -20,6 +20,8 @@ const mock: DirectorView = {
   result: null,
   camera: { scale: 1, x: 0, y: 0 },
   focus: true,
+  canAdvance: true,
+  manual: false,
 };
 
 const base: SceneState = {
@@ -87,7 +89,7 @@ export function Lab() {
       </div>
       <div className="relative flex-1">
         <Diorama scene={s} className="absolute inset-0 h-full w-full" scale={1} />
-        {view && <DirectorOverlay view={view} onStop={() => setView(null)} onRestart={() => setView(null)} onClose={() => setView(null)} soundOn={false} onToggleSound={() => {}} />}
+        {view && <DirectorOverlay view={view} onStop={() => setView(null)} onRestart={() => setView(null)} onClose={() => setView(null)} soundOn={false} onToggleSound={() => {}} onNext={() => {}} onToggleManual={() => {}} />}
       </div>
     </div>
   );

@@ -46,6 +46,10 @@ export interface DirectorView {
   camera: Camera;
   /** Dim the world slightly while a caption needs the eye. */
   focus: boolean;
+  /** True while the story is only dwelling on a caption, so "Next" can move on. False while waiting on the chain. */
+  canAdvance: boolean;
+  /** Step-by-step mode: every dwell waits for the viewer instead of a timer. */
+  manual: boolean;
 }
 
 // camera presets: wide shot, the reservoir, the plaza where policies live, the towers
@@ -73,6 +77,8 @@ const EMPTY: DirectorView = {
   result: null,
   camera: WIDE,
   focus: false,
+  canAdvance: false,
+  manual: false,
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -85,12 +91,28 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
   const runId = useRef(0);
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  /** Releases the dwell the story is currently resting on. Null while it is waiting on the chain. */
+  const advanceRef = useRef<(() => void) | null>(null);
+  /** Cancels the auto timer of the current dwell, so switching to step-by-step holds the slide you are on. */
+  const holdRef = useRef<(() => void) | null>(null);
+  const manualRef = useRef(false);
 
   const patch = useCallback((p: Partial<DirectorView>) => setView((v) => ({ ...v, ...p })), []);
 
   const stop = useCallback(() => {
     runId.current++;
-    setView((v) => ({ ...v, running: false, countdown: null, camera: WIDE, focus: false }));
+    advanceRef.current?.();
+    setView((v) => ({ ...v, running: false, countdown: null, camera: WIDE, focus: false, canAdvance: false }));
+  }, []);
+
+  /** "Next": move past the caption the story is resting on. Chain-bound waits cannot be skipped. */
+  const advance = useCallback(() => advanceRef.current?.(), []);
+
+  const setManual = useCallback((on: boolean) => {
+    manualRef.current = on;
+    setView((v) => ({ ...v, manual: on }));
+    if (on) holdRef.current?.(); // entering step-by-step freezes the slide that is counting down
+    else advanceRef.current?.(); // leaving it releases whatever is waiting
   }, []);
 
   const start = useCallback(async () => {
@@ -120,7 +142,43 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
       if (alive()) patch({ chapter: { n, title, line, sub }, focus: true, ...extra });
     };
 
-    setView({ ...EMPTY, running: true });
+    /**
+     * Rest on the current caption. Auto mode: for `ms`. Step-by-step mode: until the viewer presses Next.
+     * `min` is a floor that Next cannot skip (the pool allows one dump every 1.5s).
+     */
+    async function dwell(ms: number, min = 0): Promise<void> {
+      if (!alive()) throw new Cancelled();
+      const started = Date.now();
+      await new Promise<void>((resolve) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const release = () => {
+          const left = min - (Date.now() - started);
+          if (left > 0) {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(finish, left);
+          } else finish();
+        };
+        const hold = () => {
+          if (timer) clearTimeout(timer);
+          timer = undefined;
+        };
+        function finish() {
+          if (timer) clearTimeout(timer);
+          // only clear the handlers if they are still ours: a newer run may have installed its own
+          if (advanceRef.current === release) advanceRef.current = null;
+          if (holdRef.current === hold) holdRef.current = null;
+          resolve();
+        }
+        advanceRef.current = release;
+        holdRef.current = hold;
+        if (!manualRef.current) timer = setTimeout(finish, ms);
+        patch({ canAdvance: true });
+      });
+      patch({ canAdvance: false });
+      if (!alive()) throw new Cancelled();
+    }
+
+    setView({ ...EMPTY, running: true, manual: manualRef.current });
 
     try {
       // Decide the length of the story up front, so the progress rail never changes under the viewer.
@@ -143,7 +201,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
       let who = depsRef.current.guest.accountId;
       if (!who) who = await depsRef.current.guest.start();
       if (!who) throw new Error("Could not create a testnet account. Is the worker running?");
-      await sleep(1600);
+      await dwell(1600);
 
       // The market must be open to start. If the last crash is still cooling off, say so rather than stall.
       const open = await api.state();
@@ -176,7 +234,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
         })),
       });
       play("buy");
-      await sleep(3200);
+      await dwell(3200);
 
       // ------------------------------------------------------------ 3. the purchase
       chapter(3, "Lock it in", "The cheapest quote wins.", "Your premium and that solver's margin lock together in one contract call.", {
@@ -228,7 +286,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
         camera: SHOTS.pit,
         quotes: null,
       });
-      await sleep(1800);
+      await dwell(1800);
       for (let i = 1; i <= 3; i++) {
         if (!alive()) throw new Cancelled();
         depsRef.current.live.markShock();
@@ -236,7 +294,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
         if (!d.ok) throw new Error(d.error ?? "A dump failed.");
         patch({ dumps: i });
         chapter(5, "Now break it", `Peg falls to $${(d.price_e8 / 1e8).toFixed(4)}.`, i < 3 ? "Hit it again." : "Below every payout line.");
-        await sleep(i < 3 ? 2300 : 1600);
+        await dwell(i < 3 ? 2300 : 1600, 1600);
       }
       const dumpedAt = Date.now();
 
@@ -254,7 +312,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
       } else {
         patch({ refused: "GATE_CLOSED" });
       }
-      await sleep(4200);
+      await dwell(4200);
 
       // ------------------------------------------------------------ 7. the hold
       const st = await api.state();
@@ -295,7 +353,7 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
           result: { premium, payout, seconds: Math.round((Date.now() - t0) / 1000), evmUrl: null, evmSkipped },
         },
       );
-      await sleep(5200);
+      await dwell(5200);
 
       // ------------------------------------------------------------ 9. the other chain
       if (evmReady) {
@@ -326,16 +384,16 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
           ],
         });
         chapter(9, "Across chains", "5 USDC landed on Ethereum.", "That address is controlled by the NEAR contract. Open the transaction and see for yourself.");
-        await sleep(6500);
+        await dwell(6500);
       }
 
       if (!alive()) throw new Cancelled();
-      patch({ running: false, done: true, focus: false, camera: SHOTS.finale, countdown: null });
+      patch({ running: false, done: true, focus: false, camera: SHOTS.finale, countdown: null, canAdvance: false });
     } catch (e) {
       if (e instanceof Cancelled) return;
-      patch({ running: false, error: (e as Error).message, focus: false, countdown: null, camera: WIDE });
+      patch({ running: false, error: (e as Error).message, focus: false, countdown: null, camera: WIDE, canAdvance: false });
     }
   }, [patch]);
 
-  return { view, start, stop };
+  return { view, start, stop, advance, setManual };
 }

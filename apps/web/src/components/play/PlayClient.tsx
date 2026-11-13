@@ -198,6 +198,8 @@ export function PlayClient() {
             onClose={() => setDismissed(true)}
             soundOn={sfx.on}
             onToggleSound={sfx.toggle}
+            onNext={director.advance}
+            onToggleManual={director.setManual}
           />
 
           {/* peg readout */}

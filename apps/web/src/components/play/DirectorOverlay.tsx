@@ -57,6 +57,8 @@ export function DirectorOverlay({
   onClose,
   soundOn,
   onToggleSound,
+  onNext,
+  onToggleManual,
 }: {
   view: DirectorView;
   onStop: () => void;
@@ -64,6 +66,8 @@ export function DirectorOverlay({
   onClose: () => void;
   soundOn: boolean;
   onToggleSound: () => void;
+  onNext: () => void;
+  onToggleManual: (on: boolean) => void;
 }) {
   const active = view.running || view.done || !!view.error;
 
@@ -72,10 +76,17 @@ export function DirectorOverlay({
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") (view.running ? onStop : onClose)();
+      // → / Space / Enter: next slide, but never steal Space or Enter from a focused button or field
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "BUTTON" || el.isContentEditable);
+      if (view.running && (e.key === "ArrowRight" || (!typing && (e.key === " " || e.key === "Enter")))) {
+        e.preventDefault();
+        onNext();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, view.running, onStop, onClose]);
+  }, [active, view.running, onStop, onClose, onNext]);
 
   const ch = view.chapter;
   const mult = view.result && view.result.premium > 0 ? view.result.payout / view.result.premium : 0;
@@ -112,6 +123,34 @@ export function DirectorOverlay({
               })}
             </div>
             <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+              {view.running && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      onToggleManual(!view.manual);
+                      e.currentTarget.blur(); // keep Space and Enter free to move on
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-[0.75rem] backdrop-blur-md transition-colors ${
+                      view.manual ? "border-blue-lit/70 bg-blue/20 text-bone" : "border-line/80 bg-ink/70 text-mute hover:border-mute/60 hover:text-bone"
+                    }`}
+                    aria-pressed={view.manual}
+                    title="Pause on every slide and move on with Next"
+                  >
+                    Step by step
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      onNext();
+                      e.currentTarget.blur();
+                    }}
+                    disabled={!view.canAdvance}
+                    className="bg-blue hover:bg-blue-lit rounded-full px-3.5 py-1.5 text-[0.75rem] font-medium text-white backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-blue"
+                    title={view.canAdvance ? "Next slide (→)" : "Waiting for the chain"}
+                  >
+                    {view.canAdvance ? "Next →" : "On-chain…"}
+                  </button>
+                </>
+              )}
               <button
                 onClick={onToggleSound}
                 className="border-line/80 bg-ink/70 hover:border-mute/60 text-mute hover:text-bone rounded-full border px-3 py-1.5 text-[0.75rem] backdrop-blur-md transition-colors"
