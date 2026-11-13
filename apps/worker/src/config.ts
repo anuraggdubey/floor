@@ -76,7 +76,8 @@ export function loadConfig(): Cfg {
     ],
     encSecret: req("ENC_SECRET"),
     adminApiToken: opt("ADMIN_API_TOKEN", ""),
-    webOrigin: opt("WEB_ORIGIN", "*"),
+    // A trailing slash (easy to paste) would never match the browser's Origin header and silently block every call.
+    webOrigin: opt("WEB_ORIGIN", "*").trim().replace(/\/+$/, ""),
     // After a sustained breach the arbitrage bot waits this long before buying the peg back,
     // so the sustain window can complete and the trigger can fire.
     arbDelaySecs: Number(opt("ARB_DELAY_SECS", "75")),
