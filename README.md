@@ -57,7 +57,28 @@ price under a tier line for sustain_secs (+ settle_secs) ──▶ anyone calls 
 | Cross-contract calls and callbacks | price reads, payouts, retry on failure |
 | **Chain Signatures (MPC)** | `floor` builds an EVM USDC transfer itself and asks `v1.signer-prod.testnet` to sign it |
 
-Deployed on testnet: `floorxa-fusdc.testnet`, `floorxa-pool.testnet`, `floorxa-floor.testnet`.
+## On-chain proof (NEAR testnet)
+| Contract | Account | Deployed code hash | Role |
+|---|---|---|---|
+| `floor` | [`floorxa-floor.testnet`](https://testnet.nearblocks.io/address/floorxa-floor.testnet) | `5rT41JtvjPFyNDAEDo19afjgazR9uvRzcBCE8RZ8ipZr` | cover market: quote verification, gate, triggers, payouts, EVM payout |
+| `peg-pool` | [`floorxa-pool.testnet`](https://testnet.nearblocks.io/address/floorxa-pool.testnet) | `9A4xxa9wiF5uyPhA7izEWjme2S77ovZCNxrcJYn4fuW6` | dumpable demo stable pair that the price comes from |
+| `fusdc` | [`floorxa-fusdc.testnet`](https://testnet.nearblocks.io/address/floorxa-fusdc.testnet) | `68sTUKw9B3s8bjR3GtkohVtdaduZSXzJke4srhqYqYCk` | NEP-141 demo money |
+
+Roles are separate accounts: `floorxa-solver-a/b/c.testnet` (underwriters, each with its own margin and quote key), `floorxa-keeper.testnet`, `floorxa-arb.testnet`, and `*.floorxa-guests.testnet` (visitor accounts). Read the live state yourself, no keys needed:
+```bash
+near contract call-function as-read-only floorxa-floor.testnet get_pool_stats json-args '{}' network-config testnet now
+near contract call-function as-read-only floorxa-floor.testnet get_policy json-args '{"policy_id":11}' network-config testnet now
+```
+
+**One full cycle, policy #11** (100 fUSDC cover from `floorxa-solver-c`, bought by a guest account, 2026-11-12):
+| Step | Transaction |
+|---|---|
+| Buy: signed quote verified, solver margin locked, premium 0.60 | [`CFrqwjyF…xAb3`](https://testnet.nearblocks.io/txns/CFrqwjyFbq2g4yawFXq6eojqbZH9bMEiMCnNxExkAxb3) |
+| A late buyer is refused on-chain (`GATE_CLOSED`) and refunded | [`E7NDVYi4…9ykNk`](https://testnet.nearblocks.io/txns/E7NDVYi4tSZedvVtqkf4oi695NBbhGtewSFNinP9ykNk) |
+| Sustained breach: `trigger` pays the holder 15.00 fUSDC and reserves a 5 USDC Ethereum payout | [`DMQj7VQH…tJk4`](https://testnet.nearblocks.io/txns/DMQj7VQH5sSx9w1eyX8wagq1uyaJ2Lg9h3sPCpRdtJk4) |
+| Cross-chain leg (policy #5): Chain Signatures signs, 5.00 USDC lands on Sepolia | [`0x22fe0094…5b03`](https://sepolia.etherscan.io/tx/0x22fe00940d020c6b0f776445ed102c478e1a4b8bfcbc8425672306095c835b03) |
+
+As of 2026-11-13 the market has 3 underwriters and 13 policies written, all of them from testing. More transactions and the exact hashes of the MPC sign request are in [`docs/evidence`](docs/evidence).
 
 ## What is real and what is simulated
 | Piece | Status |
