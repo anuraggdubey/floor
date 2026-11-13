@@ -64,7 +64,7 @@ price under a tier line for sustain_secs (+ settle_secs) ──▶ anyone calls 
 | `peg-pool` | [`floorxa-pool.testnet`](https://testnet.nearblocks.io/address/floorxa-pool.testnet) | `9A4xxa9wiF5uyPhA7izEWjme2S77ovZCNxrcJYn4fuW6` | dumpable demo stable pair that the price comes from |
 | `fusdc` | [`floorxa-fusdc.testnet`](https://testnet.nearblocks.io/address/floorxa-fusdc.testnet) | `68sTUKw9B3s8bjR3GtkohVtdaduZSXzJke4srhqYqYCk` | NEP-141 demo money |
 
-Roles are separate accounts: `floorxa-solver-a/b/c.testnet` (underwriters, each with its own margin and quote key), `floorxa-keeper.testnet`, `floorxa-arb.testnet`, and `*.floorxa-guests.testnet` (visitor accounts). Read the live state yourself, no keys needed:
+Underwriters (`floorxa-solver-a/b/c.testnet`), the keeper, the arbitrage bot and each guest are separate accounts. Read the live state yourself, no keys needed:
 ```bash
 near contract call-function as-read-only floorxa-floor.testnet get_pool_stats json-args '{}' network-config testnet now
 near contract call-function as-read-only floorxa-floor.testnet get_policy json-args '{"policy_id":11}' network-config testnet now
@@ -78,21 +78,14 @@ near contract call-function as-read-only floorxa-floor.testnet get_policy json-a
 | Sustained breach: `trigger` pays the holder 15.00 fUSDC and reserves a 5 USDC Ethereum payout | [`DMQj7VQH…tJk4`](https://testnet.nearblocks.io/txns/DMQj7VQH5sSx9w1eyX8wagq1uyaJ2Lg9h3sPCpRdtJk4) |
 | Cross-chain leg (policy #5): Chain Signatures signs, 5.00 USDC lands on Sepolia | [`0x22fe0094…5b03`](https://sepolia.etherscan.io/tx/0x22fe00940d020c6b0f776445ed102c478e1a4b8bfcbc8425672306095c835b03) |
 
-As of 2026-11-13 the market has 3 underwriters and 13 policies written, all of them from testing. More transactions and the exact hashes of the MPC sign request are in [`docs/evidence`](docs/evidence).
+More transactions and the Chain Signatures sign request are in [`docs/evidence`](docs/evidence).
 
-## What is real and what is simulated
-| Piece | Status |
-|---|---|
-| Three contracts, lifecycle, invariants | **real**, on testnet, unit and sandbox tested |
-| Quote signing (TypeScript) and verification (Rust) | **real**, shared test vector |
-| fUSDC payout on NEAR | **real**, verified end to end on testnet |
-| USDC payout on Ethereum Sepolia via Chain Signatures | **real**: tx [`0x22fe0094…5b03`](https://sepolia.etherscan.io/tx/0x22fe00940d020c6b0f776445ed102c478e1a4b8bfcbc8425672306095c835b03), see [evidence](docs/evidence/f3-cross-chain-payout.md) |
-| AI underwriters (Groq LLM) | **real** with `GROQ_API_KEY`, otherwise scripted and labelled |
-| Demo money (`fusdc`) and the stable under test (`dUSD`) | **simulated** demo assets, not real USDC |
-| Time machine | **simulation** on real Binance data |
-| Guest accounts | **custodial, testnet only** |
+## What is on-chain, and what is demo scaffolding
+**On-chain and verifiable:** the three contracts and their full lifecycle, quote signing (TypeScript) and verification (Rust) with a shared test vector, the fUSDC payout on NEAR, the USDC payout on Ethereum Sepolia through Chain Signatures, and AI underwriters that run as their own NEAR accounts (LLM-driven with `GROQ_API_KEY`, otherwise a scripted strategy, labelled `scripted` in the UI).
 
-Every claim has a row in [`docs/CLAIMS.md`](docs/CLAIMS.md) with the command and the expected result.
+**Demo scaffolding, labelled as such in the product:** `fusdc` is demo money and `dUSD` is the demo stable under test, not real USDC. Guest accounts are custodial and testnet only. The time machine is a simulation on real Binance price data.
+
+Every claim has a row in [`docs/CLAIMS.md`](docs/CLAIMS.md) with the command that proves it.
 
 ## Run and verify it locally
 Linux, macOS or WSL (Windows: use WSL). Needs Rust with the `wasm32-unknown-unknown` target, `cargo-near`, `near-cli-rs`, Node 24, pnpm 10 and `make`.
@@ -112,19 +105,14 @@ docs/         SETUP, DEPLOY, CLAIMS, spikes, evidence, screenshots
 scripts/      end-to-end and helper scripts
 ```
 
-## Known limitations
-- The peg under test is a demo stable on a demo pool, not USDC. March 2023 is a labelled historical reference.
-- Underwriters are a demo, not a real underwriting desk. NEAR's shared quote bus is documented for swaps; Floor runs its own quote flow and does not claim NEAR's solvers underwrite cover.
-- Cover is fully collateralised per policy (capital heavy for solvers); fixed partial payouts do not cover a total collapse.
-- The trigger relies on pokes landing inside the sustain window; a TWAP is the next hardening step.
-- The cross-chain payout is outbound only and capped at 5 USDC. The contract cannot read Ethereum, so confirmation comes from a trusted executor, and the MPC committee is a trust assumption.
-- Testnet only, demo credits, custodial guest accounts. Not regulated insurance, and this prototype does not prove demand. Open items: [`docs/spikes.md`](docs/spikes.md).
+## Scope and limits
+- Testnet only, demo credits, not regulated insurance. The peg is a demo stable, not USDC; March 2023 is a labelled historical reference.
+- Cover is fully collateralised per policy, and fixed partial payouts do not cover a total collapse. The trigger relies on pokes landing inside the sustain window; a TWAP is the next step.
+- The Ethereum leg is outbound only and capped at 5 USDC. The contract cannot read Ethereum, so confirmation comes from a trusted executor, and the MPC committee is a trust assumption.
+- Floor runs its own quote flow; it does not claim NEAR's swap solvers underwrite cover. Open items: [`docs/spikes.md`](docs/spikes.md).
 
-## Hackathon disclosures
-- **Event:** NEAR HACKATHON 2026 (build window 2026-11-01 to 2026-11-14). No pre-existing baseline code.
-- **AI assistance:** Claude Code helped research, plan and write code and documentation; the AI underwriters call an LLM through the Groq API. All claims are checked against `docs/CLAIMS.md`.
-- **Third party:** near-sdk, near-contract-standards, near-api-js, chainsig.js, viem, Next.js (see lockfiles). Time-machine prices: Binance public market data.
-- **Security:** keys live only in `.env` and host environment variables, never in git. Guest keys are server-held and testnet only; do not reuse that pattern for real funds.
+## Built at NEAR HACKATHON 2026
+Build window 2026-11-01 to 2026-11-14, no pre-existing baseline code. Claude Code helped write code and docs; the underwriters call an LLM through the Groq API. Third party: near-sdk, near-contract-standards, near-api-js, chainsig.js, viem, Next.js (see lockfiles) and Binance public market data. Keys live only in `.env` and host environment variables, never in git.
 
 ## License
 MIT, see [`LICENSE`](LICENSE).
