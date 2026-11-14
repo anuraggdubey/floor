@@ -2,19 +2,37 @@
 
 import { useLive } from "./LiveProvider";
 import { CountUp } from "./CountUp";
+import { ago } from "@/lib/api";
 
 /** Four live numbers straight off the chain, in DeepBook's flat stat-strip arrangement. */
 export function StatsRow() {
   const live = useLive();
-  const p = live.price ? live.price.price_e8 / 1e8 : 1;
+  const p = live.price ? live.price.price_e8 / 1e8 : null;
   const stats = live.state?.stats;
   const posted = stats ? (Number(stats.free_margin) + Number(stats.locked_margin)) / 1e6 : 0;
   const locked = stats ? Number(stats.locked_margin) / 1e6 : 0;
+  // Never show a zero that is really "no data yet": a dash, with the reason underneath, reads as loading, not as a dead product.
+  const dash = <span className="text-mute/60">—</span>;
+  const fresh = live.status === "live";
+  const waiting = live.status === "loading" ? "connecting…" : "waking the server…";
+  const old = live.asOf ? `last seen ${ago(live.asOf)}` : waiting;
 
   const items = [
-    { label: "Peg right now", node: <CountUp value={p} dp={4} prefix="$" />, note: live.gate?.open ? "cover on sale" : "cover closed" },
-    { label: "Policies written", node: <CountUp value={stats?.policies ?? 0} />, note: "on NEAR testnet" },
-    { label: "Solver margin posted", node: <CountUp value={posted} prefix="" suffix="" />, note: `${locked.toLocaleString("en-US")} committed` },
+    {
+      label: "Peg right now",
+      node: p !== null ? <CountUp value={p} dp={4} prefix="$" /> : dash,
+      note: !fresh ? old : live.gate?.open ? "cover on sale" : "cover closed",
+    },
+    {
+      label: "Policies written",
+      node: stats ? <CountUp value={Number(stats.policies ?? 0)} /> : dash,
+      note: !stats ? waiting : fresh ? "on NEAR testnet" : old,
+    },
+    {
+      label: "Solver margin posted",
+      node: stats ? <CountUp value={posted} prefix="" suffix="" /> : dash,
+      note: !stats ? waiting : fresh ? `${locked.toLocaleString("en-US")} committed` : old,
+    },
     { label: "Claims to file", node: <span>0</span>, note: "the contract just pays" },
   ];
 

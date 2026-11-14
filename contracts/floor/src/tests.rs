@@ -565,6 +565,54 @@ fn margin_accounting_is_conserved_across_a_payout() {
     assert_eq!(t.c.total_exposure, 0);
 }
 
+// ------------------------------------------------- unobserved time never counts
+
+#[test]
+#[should_panic(expected = "NOT_TRIGGERED")]
+fn a_gap_in_observations_cannot_count_as_a_sustained_breach() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    // the dip is observed once ...
+    t.price(95_000_000, T0 + 60);
+    // ... then nobody observes the price for far longer than `stale_secs`, so the peg may well have
+    // recovered in between. A later observation must not read as 140 unbroken seconds below the line.
+    t.price(95_000_000, T0 + 200);
+    t.at("anyone.test", T0 + 240);
+    t.c.trigger(1);
+}
+
+#[test]
+fn a_breach_observed_continuously_after_a_gap_still_pays() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    t.price(95_000_000, T0 + 60);
+    t.price(95_000_000, T0 + 200); // gap: the breach clock restarts here
+    t.price(95_000_000, T0 + 235); // 35s of observed breach >= sustain_secs
+    t.at("anyone.test", T0 + 266); // and the settlement delay has passed
+    assert_eq!(t.c.trigger(1).0, 3_000_000, "3% of 100 fUSDC");
+}
+
+// ------------------------------------------------ owner cannot rewrite live cover
+
+#[test]
+#[should_panic(expected = "POLICIES_LIVE")]
+fn owner_cannot_change_the_tier_schedule_under_live_policies() {
+    let mut t = T::new();
+    active_policy(&mut t);
+    set_ctx("owner.test", T0 + 40);
+    t.c.set_params(Params::demo());
+}
+
+#[test]
+fn owner_can_change_params_when_nothing_is_live() {
+    let mut t = T::new();
+    set_ctx("owner.test", T0 + 1);
+    let mut p = Params::demo();
+    p.exposure_cap = U128(2_000_000_000_000);
+    t.c.set_params(p);
+    assert_eq!(t.c.get_params().exposure_cap.0, 2_000_000_000_000);
+}
+
 // ------------------------------------------------------------ settlement delay
 
 #[test]
@@ -733,11 +781,15 @@ fn signing_requests_are_owner_only_and_nonces_only_move_forward() {
 
     set_ctx("owner.test", T0 + 130);
     let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
-    // reusing a spent nonce would let one signature replace another
+    // While a payout is Signing the MPC may still publish the first signature, so a retry must reuse the
+    // same nonce. A different one could end up with two signed transactions for one payout, both mined.
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000)
+        t.c.request_evm_payout(1, 8, U128(1_500_000_000), U128(30_000_000_000), 100_000)
     }))
     .is_err());
+    // the same nonce is a legitimate retry (for example the first signing callback failed)
+    let _ = t.c.request_evm_payout(1, 7, U128(1_500_000_000), U128(30_000_000_000), 100_000);
+    assert_eq!(t.c.get_evm_payout(1).unwrap().nonce, Some(7));
 }
 
 #[test]

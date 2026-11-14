@@ -124,16 +124,34 @@ export class ApiError extends Error {
  */
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
+/** Reads should answer fast; anything that sends a chain transaction (or makes a NEAR account) gets longer. */
+const READ_TIMEOUT_MS = 15_000;
+const WRITE_TIMEOUT_MS = 60_000;
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem(GUEST_KEY) : null;
-  const res = await fetch(API_BASE + path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { "x-guest-token": token } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  // Without a timeout a sleeping free-tier worker leaves the fetch hanging and the page waiting forever.
+  const ms = init?.method && init.method !== "GET" ? WRITE_TIMEOUT_MS : READ_TIMEOUT_MS;
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(ms),
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { "x-guest-token": token } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    const slow = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
+    throw new ApiError(
+      "NETWORK",
+      slow
+        ? "The demo server is slow to answer (it may be waking up)."
+        : "Cannot reach the demo server. Check your connection and try again.",
+    );
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const e = (json as { error?: { code?: string; message?: string } }).error;
@@ -214,6 +232,14 @@ export function price(e8: number, dp = 4): string {
 
 export function tierPrice(below_price_e8: number): number {
   return below_price_e8 / 1e8;
+}
+
+/** "12s ago", "4m ago", "3h ago". */
+export function ago(ms: number, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - ms) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  return `${Math.round(s / 3600)}h ago`;
 }
 
 export function shortTx(hash: string): string {

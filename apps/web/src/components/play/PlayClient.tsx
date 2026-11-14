@@ -11,6 +11,7 @@ import { BuyPanel, DumpPanel, PolicyList, Feed } from "./Panels";
 import { EvmPanel } from "./EvmPanel";
 import { DirectorOverlay } from "./DirectorOverlay";
 import { Odometer } from "@/components/Odometer";
+import { LiveNote } from "@/components/LiveStatus";
 import { useDirector } from "@/lib/useDirector";
 import { useSound } from "@/lib/sfx";
 
@@ -56,8 +57,13 @@ export function PlayClient() {
 
   // The gate flag trails the price by a few seconds (it is only refreshed when the keeper pokes), so call a
   // broken peg what it is straight away instead of showing "on sale" next to a crashing price.
-  const sellable = !!gate?.open && !broken;
-  const gateLabel = gate?.open && broken
+  const known = live.status === "live" && !!gate;
+  const sellable = known && !!gate?.open && !broken;
+  const gateLabel = !known
+    ? live.status === "waking" || live.status === "offline"
+      ? "Waking the demo server…"
+      : "Connecting to the chain…"
+    : gate?.open && broken
     ? "Peg under stress — gate closing"
     : gate?.open
     ? "Cover on sale"
@@ -212,14 +218,24 @@ export function PlayClient() {
               <p className="kicker">Peg</p>
               <p
                 className={`tnum mt-1 text-[clamp(2rem,5vw,3.25rem)] leading-none transition-colors duration-500 ${
-                  broken ? "text-blood" : "text-bone"
+                  broken ? "text-blood" : live.price ? "text-bone" : "text-mute"
                 }`}
               >
-                $<Odometer value={fmtPrice(live.price?.price_e8 ?? 1e8)} />
+                {live.price ? (
+                  <>
+                    $<Odometer value={fmtPrice(live.price.price_e8)} />
+                  </>
+                ) : (
+                  <span aria-label="price not loaded yet">$—</span>
+                )}
               </p>
               <p
                 className={`mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[0.75rem] ${
-                  sellable ? "border-mint/40 bg-mint/10 text-mint" : "border-blood/40 bg-blood/10 text-blood"
+                  !known
+                    ? "border-line text-mute"
+                    : sellable
+                      ? "border-mint/40 bg-mint/10 text-mint"
+                      : "border-blood/40 bg-blood/10 text-blood"
                 }`}
               >
                 {gateLabel}
@@ -252,7 +268,7 @@ export function PlayClient() {
                         style={sustained ? { animation: "pulse-ring 1.6s infinite" } : undefined}
                       />
                       <span className={`tnum ${under ? "text-bone" : "text-mute"}`}>${lvl.toFixed(2)}</span>
-                      <span className="text-mute">pays {(t.payout_bps / 100).toFixed(0)}%</span>
+                      <span className="text-mute">pays {(t.payout_bps / 100).toFixed(0)}% of cover</span>
                       {sustained && <span className="text-blood text-[0.6875rem]">HELD — SETTLING</span>}
                     </li>
                   );
@@ -280,7 +296,7 @@ export function PlayClient() {
                 disabled={guest.loading}
                 className="bg-blue hover:bg-blue-lit mt-5 w-full rounded-lg py-3.5 text-[1rem] font-medium text-white transition-colors disabled:opacity-50"
               >
-                {guest.loading ? "Creating your account…" : "Give me an account"}
+                {guest.loading ? "Creating your account… (up to 30s)" : "Give me an account"}
               </button>
               <button
                 onClick={() => {
@@ -306,9 +322,14 @@ export function PlayClient() {
             </>
           )}
 
-          {live.error && (
+          {live.status !== "live" && (
+            <div className="border-line/80 bg-ink-2/70 rounded-lg border p-3">
+              <LiveNote live={live} />
+            </div>
+          )}
+          {live.status === "live" && live.error && (
             <p className="text-blood border-blood/30 bg-blood/5 rounded-lg border p-3 text-[0.8125rem]">
-              Cannot reach the worker: {live.error}
+              {live.error}
             </p>
           )}
         </aside>

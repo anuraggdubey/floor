@@ -12,8 +12,8 @@ const LIMITS: Array<{ q: string; a: string }> = [
     a: "Each policy locks the solver's whole maximum payout. That is honest but capital-heavy, and it is the main thing a production version would have to improve.",
   },
   {
-    q: "The trigger depends on being watched.",
-    a: "A keeper pokes the price so the contract sees a sustained breach. Anyone can do it, but a TWAP would be the stronger design and is the next thing we would build.",
+    q: "The trigger depends on being watched, and on a pool anyone can move.",
+    a: "A keeper pokes the price so the contract sees a sustained breach. Anyone can poke, and time nobody observed never counts toward a breach. But the price is a spot read from a pool you can trade against, which is why it is safe to hand you the dump button here. A real version needs a TWAP, deep liquidity and swap fees so moving the price costs more than a payout is worth.",
   },
   {
     q: "The cross-chain payout is one-way.",

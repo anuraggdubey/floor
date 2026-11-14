@@ -1,7 +1,7 @@
 // HTTP API for the web app: guest accounts, live state (SSE), RFQ and quotes, buying cover, dumping the peg.
 import crypto from "node:crypto";
 import http from "node:http";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 import type { Chain } from "./chain.js";
 import type { Cfg } from "./config.js";
 import type { Bus } from "./events.js";
@@ -9,6 +9,7 @@ import type { PriceFeed } from "./prices.js";
 import type { Bots, SignedOffer } from "./bots.js";
 import type { Guests } from "./guests.js";
 import { paramsHash } from "./quote.js";
+import { Throttle, memoAsync } from "./throttle.js";
 
 type Keeper = { ensureFresh(maxAgeMs?: number): Promise<void> };
 type Arb = { setEnabled(v: boolean): void };
@@ -29,6 +30,25 @@ export function toBase(x: unknown, decimals = 6): bigint {
   if (!/^\d+(\.\d+)?$/.test(s)) throw new HttpError(400, "BAD_AMOUNT", `amount must be a positive number, got "${s}"`);
   const [i, f = ""] = s.split(".");
   return BigInt(i! + f.padEnd(decimals, "0").slice(0, decimals));
+}
+
+/**
+ * The address to rate-limit a caller by. Render's proxy appends to a client-supplied X-Forwarded-For instead of
+ * replacing it, so its first entry is trivially spoofable (one script could mint a new "IP" per request and fill
+ * every guest slot). Cloudflare, which always fronts Render, sets True-Client-IP itself and overwrites anything
+ * the client sent, so that header wins. Only when neither is present (local dev, a direct connection) do we fall
+ * back to the first X-Forwarded-For entry, then the socket address.
+ */
+export function clientIp(headers: IncomingHttpHeaders, remote?: string): string {
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim();
+  const plausible = (s: string | undefined): s is string => !!s && /^[0-9a-fA-F:.]{3,45}$/.test(s);
+  for (const h of ["true-client-ip", "cf-connecting-ip"]) {
+    const v = one(headers[h]);
+    if (plausible(v)) return v;
+  }
+  const xff = one(headers["x-forwarded-for"])?.split(",")[0]?.trim();
+  if (plausible(xff)) return xff;
+  return remote ?? "unknown";
 }
 
 /** Sender balances on the EVM chain, via plain JSON-RPC (no viem), cached so the UI can poll freely. */
@@ -63,7 +83,17 @@ async function evmFunding(cfg: Cfg, token: string): Promise<{ usdc: string; eth:
 export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: PriceFeed; bots: Bots; guests: Guests; keeper: Keeper; arb: Arb }) {
   const { chain, cfg, bus, feed, bots, guests, keeper, arb } = deps;
   const rfqs = new Map<string, { holder: string; offers: SignedOffer[]; at: number }>();
-  const lastDump = new Map<string, number>();
+  // Per-guest pacing. Every one of these ends in a chain call paid for by the demo's accounts.
+  const dumpGate = new Throttle(1500);
+  const rfqGate = new Throttle(2000);
+  const buyGate = new Throttle(2000);
+  const faucetGate = new Throttle(10_000);
+  let streams = 0;
+  const MAX_STREAMS = 300;
+  const pace = (gate: Throttle, key: string, what: string) => {
+    const wait = gate.hit(key);
+    if (wait > 0) throw new HttpError(429, "SLOW_DOWN", `${what}: try again in ${Math.ceil(wait / 1000)}s`);
+  };
 
   function cors(res: ServerResponse) {
     res.setHeader("Access-Control-Allow-Origin", cfg.webOrigin);
@@ -111,7 +141,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
 
   const STRATEGY_NAME: Record<string, string> = { volatility: "Volatility", history: "History", aggressive: "Aggressive" };
 
-  async function state() {
+  async function loadState() {
     const [params, stats, solvers] = await Promise.all([
       bots.getParams(),
       chain.view<any>(cfg.floor, "get_pool_stats"),
@@ -138,10 +168,13 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
     };
   }
 
+  // The landing page and /play both poll this; one chain read per 2s is plenty however many people are watching.
+  const state = memoAsync(loadState, 2000);
+
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? "/", "http://x");
     const p = url.pathname;
-    const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown").split(",")[0]!.trim();
+    const ip = clientIp(req.headers, req.socket.remoteAddress);
     if (req.method === "OPTIONS") {
       cors(res);
       res.writeHead(204).end();
@@ -160,6 +193,8 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
     if (req.method === "GET" && p === "/api/state") return send(res, 200, await state());
 
     if (req.method === "GET" && p === "/api/stream") {
+      if (streams >= MAX_STREAMS) throw new HttpError(503, "BUSY", "too many live viewers right now, try again in a moment");
+      streams++;
       cors(res);
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache, no-transform", connection: "keep-alive" });
       const write = (kind: string, data: unknown) => res.write(`data: ${JSON.stringify({ kind, data })}\n\n`);
@@ -167,6 +202,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
       const unsub = bus.subscribe((ev) => write(ev.kind, { ...ev.data, ts: ev.ts, eid: ev.id }));
       const hb = setInterval(() => res.write(": hb\n\n"), 15_000);
       req.on("close", () => {
+        streams--;
         clearInterval(hb);
         unsub();
       });
@@ -191,7 +227,8 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
     }
 
     if (req.method === "POST" && p === "/api/faucet") {
-      const { acct } = guestFrom(req, await readJson(req));
+      const { token, acct } = guestFrom(req, await readJson(req));
+      pace(faucetGate, token, "top up");
       const [a, b] = await Promise.all([
         chain.send(acct, cfg.fusdc, "faucet", {}, { tgas: 30 }),
         chain.send(acct, cfg.pool, "claim_demo", {}, { tgas: 30 }),
@@ -202,6 +239,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
     if (req.method === "POST" && p === "/api/rfq") {
       const body = await readJson(req);
       const { token } = guestFrom(req, body);
+      pace(rfqGate, token, "quotes");
       const params = await bots.getParams();
       const notional = toBase(body.notional);
       if (notional < 10_000_000n || notional > 5_000_000_000n) throw new HttpError(400, "BAD_NOTIONAL", "notional must be between 10 and 5,000 fUSDC");
@@ -230,6 +268,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
     if (req.method === "POST" && p === "/api/buy") {
       const body = await readJson(req);
       const { token, acct } = guestFrom(req, body);
+      pace(buyGate, token, "buy");
       const rfq = rfqs.get(String(body.rfq_id));
       if (!rfq || rfq.holder !== guests.accountId(token)) throw new HttpError(404, "NO_RFQ", "unknown or expired RFQ");
       const offer = rfq.offers.find((o) => o.solver === body.solver);
@@ -261,9 +300,7 @@ export function startServer(deps: { chain: Chain; cfg: Cfg; bus: Bus; feed: Pric
       const { token, acct } = guestFrom(req, body);
       const amount = toBase(body.amount);
       if (amount < 1_000_000n || amount > 100_000_000_000n) throw new HttpError(400, "BAD_AMOUNT", "dump between 1 and 100,000 dUSD");
-      const now = Date.now();
-      if (now - (lastDump.get(token) ?? 0) < 1500) throw new HttpError(429, "SLOW_DOWN", "one dump every 1.5 seconds");
-      lastDump.set(token, now);
+      pace(dumpGate, token, "dump");
       const before = feed.latest?.price_e8 ?? null;
       const r = await chain.send(acct, cfg.pool, "sell_dusd", { amount: amount.toString() }, { tgas: 30 });
       const after = await chain.view<string>(cfg.pool, "get_price_e8");

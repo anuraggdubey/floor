@@ -145,8 +145,12 @@ impl Floor {
     }
 
     /// Owner only. Resets the breach tracking because tier indexes change meaning.
+    ///
+    /// Refused while any cover is live: policies are paid from `self.params.tiers`, so changing the schedule
+    /// under an open policy would let the owner rewrite what a holder was sold.
     pub fn set_params(&mut self, params: Params) {
         require!(env::predecessor_account_id() == self.owner, "OWNER_ONLY");
+        require!(self.total_exposure == 0, "POLICIES_LIVE");
         params.validate();
         self.tier_state = vec![TierState::default(); params.tiers.len()];
         self.sustained_log.clear();
@@ -206,7 +210,12 @@ impl Floor {
             po.status == PayoutStatus::Reserved || po.status == PayoutStatus::Signing,
             "ALREADY_SIGNED"
         );
-        require!(nonce >= self.evm_next_nonce, "NONCE_WENT_BACKWARDS");
+        match (po.status, po.nonce) {
+            // Retrying a payout that is already Signing: the MPC may still publish the first signature, so the
+            // retry must be the same nonce, or two signed transactions for one payout could both be mined.
+            (PayoutStatus::Signing, Some(prev)) => require!(nonce == prev, "NONCE_MISMATCH"),
+            _ => require!(nonce >= self.evm_next_nonce, "NONCE_WENT_BACKWARDS"),
+        }
         require!(gas_limit >= 21_000 && gas_limit <= 300_000, "BAD_GAS_LIMIT");
         require!(max_fee_per_gas.0 > 0 && max_fee_per_gas.0 <= 2_000_000_000_000u128, "BAD_MAX_FEE");
         require!(max_priority_fee_per_gas.0 <= max_fee_per_gas.0, "BAD_PRIORITY_FEE");
@@ -229,7 +238,7 @@ impl Floor {
             m.sighash = Some(hash.clone());
             m.nonce = Some(nonce);
         }
-        self.evm_next_nonce = nonce + 1;
+        self.evm_next_nonce = self.evm_next_nonce.max(nonce + 1);
         self.emit("evm_sign_requested", json!({ "id": payout_id, "to": po.to, "amount": po.amount, "nonce": nonce, "sighash": hash }));
 
         Promise::new(chain.signer)
@@ -562,6 +571,17 @@ impl Floor {
     /// Update the gate and breach tracking from a price observation. Pure state logic; unit-tested directly.
     pub fn apply_price(&mut self, price_e8: u64, ts: u64) {
         require!(ts >= self.last_price_ts, "TIME_WENT_BACKWARDS");
+        // A breach only counts while it is being observed. If the previous observation is older than
+        // `stale_secs`, nobody saw what the price did in between (it may have recovered), so any breach
+        // clock that was running is void and has to start again from this observation. Without this, an
+        // attacker could poke once while the price is low, let it recover, and poke again `sustain_secs`
+        // later to claim a breach that was never continuous.
+        if self.last_price_ts > 0 && ts - self.last_price_ts > self.params.stale_secs {
+            for st in self.tier_state.iter_mut() {
+                st.start_ts = None;
+                st.sustained = false;
+            }
+        }
         self.last_price_e8 = price_e8;
         self.last_price_ts = ts;
         if price_e8 < self.params.band_e8 {

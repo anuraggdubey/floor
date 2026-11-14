@@ -66,6 +66,21 @@ export class Guests {
     fs.writeFileSync(this.file, JSON.stringify([...this.recs.values()], null, 1), { mode: 0o600 });
   }
 
+  private recent: number[] = [];
+
+  /**
+   * At most 12 new guests per 10 minutes across all callers. The per-IP limit below is only as good as the IP we
+   * can see; this cap holds even when someone rotates addresses, so one script cannot burn the parent account's
+   * NEAR or fill every guest slot in a burst.
+   */
+  private allowGlobal(): boolean {
+    const now = Date.now();
+    this.recent = this.recent.filter((t) => now - t < 600_000);
+    if (this.recent.length >= 12) return false;
+    this.recent.push(now);
+    return true;
+  }
+
   /** At most 5 new guests per IP per hour. */
   private allowIp(ip: string): boolean {
     const now = Date.now();
@@ -79,6 +94,7 @@ export class Guests {
   async create(ip: string): Promise<{ token: string; accountId: string }> {
     if (this.recs.size >= this.cfg.maxGuests) throw new Error("GUEST_LIMIT: the demo is full, try again later");
     if (!this.allowIp(ip)) throw new Error("RATE_LIMIT: too many new guests from this address");
+    if (!this.allowGlobal()) throw new Error("RATE_LIMIT: lots of new visitors right now, try again in a few minutes");
     const kp = KeyPair.fromRandom("ed25519");
     const prefix = "g" + crypto.randomBytes(5).toString("hex");
     const accountId = `${prefix}.${this.cfg.guestParent.id}`;

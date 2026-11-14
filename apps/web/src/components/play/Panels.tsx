@@ -50,6 +50,8 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
   const [msg, setMsg] = useState<{ tone: "good" | "bad"; text: string; tx?: string } | null>(null);
 
   const tenor = Math.min(600, live.state?.params.max_tenor_secs ?? 600);
+  const tiers = live.state?.params.tiers ?? [];
+  const maxPayoutFrac = tiers.length ? tiers[tiers.length - 1]!.payout_bps / 10_000 : 0.15;
   const disabled = !guest.accountId;
 
   async function getQuotes() {
@@ -110,7 +112,7 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
         ))}
       </div>
       <p className="text-mute/70 mt-2 text-[0.75rem]">
-        fUSDC · pays up to {usdc(notional * 1e6 * 0.15, 0)} at the deepest tier
+        fUSDC · pays up to {usdc(notional * 1e6 * maxPayoutFrac, 0)} at the deepest tier
       </p>
 
       <button
@@ -149,6 +151,7 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
               <div className="shrink-0 text-right">
                 <p className="tnum text-[1.0625rem] leading-tight">{usdc(o.premium)}</p>
                 <p className="text-mute text-[0.6875rem]">premium</p>
+                <p className="text-mint/80 tnum mt-1 text-[0.6875rem]">pays up to {usdc(o.max_payout)}</p>
               </div>
             </button>
           ))}

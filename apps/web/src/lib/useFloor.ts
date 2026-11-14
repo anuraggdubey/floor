@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, API_BASE, type FloorState, type Gate, type Policy, type PricePoint } from "./api";
+import { api, API_BASE, ApiError, type FloorState, type Gate, type Policy, type PricePoint } from "./api";
 import type { SceneState, Tier } from "./diorama";
 
 export interface FeedItem {
@@ -13,7 +13,18 @@ export interface FeedItem {
   tx?: string;
 }
 
+/**
+ * loading: first few seconds. waking: no answer yet, so the (free-tier) worker is probably asleep.
+ * live: a fresh state has arrived this session. offline: still nothing after two minutes.
+ */
+export type LiveStatus = "loading" | "waking" | "live" | "offline";
+
 export interface Live {
+  status: LiveStatus;
+  /** True while what is on screen is the last-known snapshot from an earlier visit, not live data. */
+  stale: boolean;
+  /** When that snapshot was taken (ms), if there is one. */
+  asOf: number | null;
   state: FloorState | null;
   price: PricePoint | null;
   gate: Gate | null;
@@ -30,6 +41,16 @@ export interface Live {
 
 const MAX_FEED = 60;
 const MAX_HISTORY = 900;
+const SNAPSHOT_KEY = "floor.snapshot.v1";
+const SNAPSHOT_MAX_AGE_MS = 24 * 3600_000;
+const OFFLINE_AFTER_MS = 120_000;
+const RETRY_MS = [2000, 3000, 5000, 8000, 10_000];
+const REFRESH_MS = 20_000;
+
+interface Snapshot {
+  at: number;
+  state: FloorState;
+}
 
 /** One live connection to the worker: a state snapshot plus an SSE stream of everything that happens. */
 export function useFloor(holder?: string | null): Live {
@@ -43,6 +64,11 @@ export function useFloor(holder?: string | null): Live {
   const [error, setError] = useState<string | null>(null);
   const [paidAt, setPaidAt] = useState<number | null>(null);
   const [shockAt, setShockAt] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [asOf, setAsOf] = useState<number | null>(null);
+  const [, setTick] = useState(0);
+  const startedAt = useRef(Date.now());
+  const attempts = useRef(0);
   const seq = useRef(0);
 
   const push = useCallback((kind: string, text: string, tone: FeedItem["tone"], tx?: string) => {
@@ -58,23 +84,86 @@ export function useFloor(holder?: string | null): Live {
     }
   }, [holder]);
 
-  const refresh = useCallback(() => {
-    void api
+  const fetchState = useCallback(async () => {
+    await api
       .state()
       .then((s) => {
+        attempts.current = 0;
         setState(s);
         if (s.price) setPrice(s.price);
         if (s.gate) setGate(s.gate);
         if (s.history?.length) setHistory(s.history);
+        setLoaded(true);
+        setAsOf(null);
         setError(null);
+        try {
+          localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ at: Date.now(), state: s } satisfies Snapshot));
+        } catch {
+          /* storage full or blocked: the snapshot is a nicety */
+        }
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => {
+        attempts.current += 1;
+        setError(e instanceof ApiError ? e.message : "Cannot reach the demo server.");
+      });
     void loadPolicies();
   }, [loadPolicies]);
 
+  const refresh = useCallback(() => {
+    void fetchState();
+  }, [fetchState]);
+
+  // Paint the last-known numbers straight away (clearly marked as old) so a cold or sleeping worker never leaves
+  // the page full of zeros. Done after mount, so server and client render the same first frame.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return;
+      const snap = JSON.parse(raw) as Snapshot;
+      if (!snap?.state || Date.now() - snap.at > SNAPSHOT_MAX_AGE_MS) return;
+      setState((cur) => cur ?? snap.state);
+      setPrice((cur) => cur ?? snap.state.price);
+      setGate((cur) => cur ?? snap.state.gate);
+      setHistory((cur) => (cur.length ? cur : (snap.state.history ?? [])));
+      setAsOf(snap.at);
+    } catch {
+      /* corrupt snapshot: ignore */
+    }
+  }, []);
+
+  // First load, retried with backoff until the worker answers; afterwards a gentle refresh so the stat strip and
+  // solver book do not freeze at whatever they showed on arrival.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    const loop = async () => {
+      if (cancelled) return;
+      if (document.hidden && loaded) {
+        timer = setTimeout(loop, REFRESH_MS);
+        return;
+      }
+      // wait for the request to finish (or time out) before scheduling the next, so a sleeping server is never
+      // hit by a pile of overlapping retries
+      await fetchState();
+      if (cancelled) return;
+      const wait = loaded ? REFRESH_MS : RETRY_MS[Math.min(Math.max(attempts.current - 1, 0), RETRY_MS.length - 1)]!;
+      timer = setTimeout(loop, wait);
+    };
+    // when already loaded, wait one interval before the next refresh instead of refetching immediately
+    if (loaded) timer = setTimeout(loop, REFRESH_MS);
+    else void loop();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fetchState, loaded]);
+
+  // re-evaluate "loading" vs "waking" vs "offline" once a second, only while there is nothing live to show
+  useEffect(() => {
+    if (loaded) return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [loaded]);
 
   useEffect(() => {
     const es = new EventSource(`${API_BASE}/api/stream`);
@@ -164,7 +253,16 @@ export function useFloor(holder?: string | null): Live {
 
   const markShock = useCallback(() => setShockAt(Date.now()), []);
 
-  return { state, price, gate, history, policies, feed, connected, error, paidAt, shockAt, refresh, markShock };
+  const waited = Date.now() - startedAt.current;
+  const status: LiveStatus = loaded
+    ? "live"
+    : waited > OFFLINE_AFTER_MS
+      ? "offline"
+      : waited > 4000 || attempts.current > 0
+        ? "waking"
+        : "loading";
+
+  return { status, stale: !loaded && asOf !== null, asOf, state, price, gate, history, policies, feed, connected, error, paidAt, shockAt, refresh, markShock };
 }
 
 /** Turn live chain data into the diorama's scene. */

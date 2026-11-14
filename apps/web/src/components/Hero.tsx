@@ -18,6 +18,8 @@ export function Hero() {
   const p = live.price ? live.price.price_e8 / 1e8 : 1;
   const open = live.gate?.open ?? true;
   const broken = p < (scene.band || 0.995);
+  // Only claim a cover state once we have heard from the chain this session; before that say so plainly.
+  const fresh = mounted && live.status === "live";
 
   return (
     <section className="relative isolate flex min-h-[100svh] flex-col justify-center overflow-hidden pt-16">
@@ -49,11 +51,11 @@ export function Hero() {
           />
           <span className="kicker !text-mute !tracking-[0.16em]">NEAR testnet</span>
           <span className="bg-line h-3 w-px" />
-          <span className="tnum text-[0.8125rem] text-bone">
-            {mounted && live.price ? `$${fmtPrice(live.price.price_e8)}` : "$1.0000"}
+          <span className={`tnum text-[0.8125rem] ${live.price ? "text-bone" : "text-mute"}`}>
+            {mounted && live.price ? `$${fmtPrice(live.price.price_e8)}` : "—"}
           </span>
-          <span className={`text-[0.8125rem] ${open ? "text-mint" : "text-blood"}`}>
-            {mounted ? (open ? "cover open" : "cover closed") : "cover open"}
+          <span className={`text-[0.8125rem] ${fresh ? (open ? "text-mint" : "text-blood") : "text-mute"}`}>
+            {fresh ? (open ? "cover open" : "cover closed") : live.status === "waking" || live.status === "offline" ? "waking up…" : "connecting…"}
           </span>
         </div>
 

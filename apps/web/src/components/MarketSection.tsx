@@ -1,6 +1,7 @@
 "use client";
 
 import { useLive } from "./LiveProvider";
+import { LiveNote } from "./LiveStatus";
 import { usdc } from "@/lib/api";
 
 const BLURB: Record<string, string> = {
@@ -36,7 +37,9 @@ export function MarketSection() {
           </p>
         </div>
 
-        <div className="mt-14 grid gap-4 md:grid-cols-3">
+        {!solvers.length && <LiveNote live={live} className="mt-10" />}
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
           {(solvers.length ? solvers : [null, null, null]).map((s, i) => {
             const free = s ? Number(s.free) : 0;
             const locked = s ? Number(s.locked) : 0;
@@ -51,33 +54,48 @@ export function MarketSection() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[1.0625rem] font-medium">{s?.name ?? "—"}</p>
-                    <p className="text-mute/70 mt-1 font-mono text-[0.6875rem]">{s?.id ?? "connecting…"}</p>
+                    {s ? (
+                      <p className="text-[1.0625rem] font-medium">{s.name}</p>
+                    ) : (
+                      <span className="bg-ink-3 block h-5 w-24 animate-pulse rounded" aria-hidden="true" />
+                    )}
+                    {s ? (
+                      <p className="text-mute/70 mt-1 font-mono text-[0.6875rem]">{s.id}</p>
+                    ) : (
+                      <span className="bg-ink-3 mt-2 block h-3 w-36 animate-pulse rounded" aria-hidden="true" />
+                    )}
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[0.6875rem] ${
-                      s?.active ? "border-mint/40 bg-mint/10 text-mint" : "border-line text-mute"
-                    }`}
-                  >
-                    {s?.active ? "quoting" : "idle"}
-                  </span>
+                  {s && (
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[0.6875rem] ${
+                        s.active ? "border-mint/40 bg-mint/10 text-mint" : "border-line text-mute"
+                      }`}
+                    >
+                      {s.active ? "quoting" : "idle"}
+                    </span>
+                  )}
                 </div>
 
                 <p className="text-mute mt-5 min-h-[4.5rem] text-[0.9375rem] leading-relaxed">
-                  {s?.strategy ? BLURB[s.strategy] : "Reading the book…"}
+                  {s?.strategy ? (
+                    BLURB[s.strategy]
+                  ) : s ? null : (
+                    <span className="block space-y-2" aria-hidden="true">
+                      <span className="bg-ink-3 block h-3 w-full animate-pulse rounded" />
+                      <span className="bg-ink-3 block h-3 w-4/5 animate-pulse rounded" />
+                    </span>
+                  )}
                 </p>
 
                 <div className="mt-5">
                   <div className="text-mute flex items-baseline justify-between text-[0.8125rem]">
                     <span>Margin committed</span>
-                    <span className="tnum text-bone">
-                      {usdc(locked, 0)} / {usdc(total, 0)}
-                    </span>
+                    <span className="tnum text-bone">{s ? `${usdc(locked, 0)} / ${usdc(total, 0)}` : "—"}</span>
                   </div>
                   <div className="bg-ink-3 mt-2.5 h-1.5 overflow-hidden rounded-full">
                     <div
                       className="bg-blue h-full rounded-full transition-[width] duration-1000"
-                      style={{ width: `${Math.max(1.5, pct)}%` }}
+                      style={{ width: s ? `${Math.max(1.5, pct)}%` : "0%" }}
                     />
                   </div>
                 </div>
