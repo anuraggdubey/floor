@@ -13,6 +13,12 @@ export interface FeedItem {
   tx?: string;
 }
 
+/** A chain event the diorama acts out: quotes ping the towers, buys land a house, the arb stills the water. */
+export interface Pulse {
+  kind: "rfq" | "buy" | "active" | "keeper" | "arb";
+  at: number;
+}
+
 /**
  * loading: first few seconds. waking: no answer yet, so the (free-tier) worker is probably asleep.
  * live: a fresh state has arrived this session. offline: still nothing after two minutes.
@@ -35,6 +41,8 @@ export interface Live {
   error: string | null;
   paidAt: number | null;
   shockAt: number | null;
+  /** Recent chain events, for the diorama to act out. */
+  pulses: Pulse[];
   refresh: () => void;
   markShock: () => void;
 }
@@ -64,6 +72,7 @@ export function useFloor(holder?: string | null): Live {
   const [error, setError] = useState<string | null>(null);
   const [paidAt, setPaidAt] = useState<number | null>(null);
   const [shockAt, setShockAt] = useState<number | null>(null);
+  const [pulses, setPulses] = useState<Pulse[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [asOf, setAsOf] = useState<number | null>(null);
   const [, setTick] = useState(0);
@@ -73,6 +82,11 @@ export function useFloor(holder?: string | null): Live {
 
   const push = useCallback((kind: string, text: string, tone: FeedItem["tone"], tx?: string) => {
     setFeed((f) => [{ id: ++seq.current, ts: Date.now(), kind, text, tone, tx }, ...f].slice(0, MAX_FEED));
+  }, []);
+
+  const pulse = useCallback((kind: Pulse["kind"]) => {
+    const now = Date.now();
+    setPulses((ps) => [...ps.filter((p) => now - p.at < 6000), { kind, at: now }]);
   }, []);
 
   const loadPolicies = useCallback(async () => {
@@ -205,8 +219,10 @@ export function useFloor(holder?: string | null): Live {
           break;
         }
         case "buy": {
-          if (d.ok) push("buy", `Cover bought — policy #${d.policy_id}`, "good", d.tx as string);
-          else push("buy", `Purchase refused on-chain: ${d.rejected ?? "failed"} (premium refunded)`, "bad", d.tx as string);
+          if (d.ok) {
+            push("buy", `Cover bought — policy #${d.policy_id}`, "good", d.tx as string);
+            pulse("buy");
+          } else push("buy", `Purchase refused on-chain: ${d.rejected ?? "failed"} (premium refunded)`, "bad", d.tx as string);
           void loadPolicies();
           break;
         }
@@ -219,6 +235,7 @@ export function useFloor(holder?: string | null): Live {
             push("policy", `Policy #${d.id} triggered at tier ${Number(d.tier_idx ?? 0) + 1}`, "gold");
           } else if (st === "Active") {
             push("policy", `Policy #${d.id} is active`, "good");
+            pulse("active");
           } else if (st === "Void") {
             push("policy", `Policy #${d.id} voided — premium refunded`, "info");
           } else if (st === "Expired") {
@@ -229,13 +246,19 @@ export function useFloor(holder?: string | null): Live {
         }
         case "rfq":
           push("rfq", `${d.quotes} solver${Number(d.quotes) === 1 ? "" : "s"} quoted, ${d.declined} declined`, "info");
+          pulse("rfq");
           break;
         case "arb":
-          if (d.ok) push("arb", `Arbitrage bought the peg back`, "good", d.tx as string);
+          if (d.ok) {
+            push("arb", `Arbitrage bought the peg back`, "good", d.tx as string);
+            pulse("arb");
+          }
           break;
         case "keeper":
-          if (d.ok && ["activate", "trigger", "expire", "pay"].includes(String(d.action)))
+          if (d.ok && ["activate", "trigger", "expire", "pay"].includes(String(d.action))) {
             push("keeper", `Keeper called ${d.action} on #${d.id}`, "info", d.tx as string);
+            pulse("keeper");
+          }
           break;
         case "reset":
           push("reset", "Peg reset to $1.0000", "info", d.tx as string);
@@ -262,11 +285,15 @@ export function useFloor(holder?: string | null): Live {
         ? "waking"
         : "loading";
 
-  return { status, stale: !loaded && asOf !== null, asOf, state, price, gate, history, policies, feed, connected, error, paidAt, shockAt, refresh, markShock };
+  return { status, stale: !loaded && asOf !== null, asOf, state, price, gate, history, policies, feed, connected, error, paidAt, shockAt, pulses, refresh, markShock };
 }
 
 /** Turn live chain data into the diorama's scene. */
 export function useScene(live: Live, myPolicies?: Policy[]): SceneState {
+  // When a policy id is first seen its house drops onto the plaza; ids present on the first
+  // render were already there, so they stand without an entrance.
+  const born = useRef<Map<number, number> | null>(null);
+
   return useMemo(() => {
     const p = live.price ? live.price.price_e8 / 1e8 : 1;
     const params = live.state?.params;
@@ -277,23 +304,35 @@ export function useScene(live: Live, myPolicies?: Policy[]): SceneState {
     }));
 
     const source = myPolicies ?? live.policies;
-    const houses = source.slice(-8).map((x) => ({
-      id: x.id,
-      state:
-        x.status === "PaidOut" || x.status === "Triggered"
-          ? ("paid" as const)
-          : x.status === "Active"
-            ? ("active" as const)
-            : x.status === "Pending"
-              ? ("pending" as const)
-              : ("void" as const),
-    }));
+    const first = born.current === null;
+    if (born.current === null) born.current = new Map();
+    const houses = source.slice(-8).map((x) => {
+      if (!born.current!.has(x.id)) born.current!.set(x.id, first ? 0 : Date.now());
+      return {
+        id: x.id,
+        bornAt: born.current!.get(x.id)!,
+        state:
+          x.status === "PaidOut" || x.status === "Triggered"
+            ? ("paid" as const)
+            : x.status === "Active"
+              ? ("active" as const)
+              : x.status === "Pending"
+                ? ("pending" as const)
+                : ("void" as const),
+      };
+    });
 
-    const towers = (live.state?.solvers ?? []).map((s) => {
-      const free = Number(s.free);
+    // A demo policy locks a sliver of a solver's book, so show commitment against the busiest solver
+    // (with a visible floor) rather than against total margin, where it would always round to nothing.
+    const solvers = live.state?.solvers ?? [];
+    const maxLocked = Math.max(0, ...solvers.map((s) => Number(s.locked)));
+    const towers = solvers.map((s) => {
       const locked = Number(s.locked);
-      const total = free + locked;
-      return { id: s.id, committed: total > 0 ? locked / total : 0, out: !s.active };
+      return {
+        id: s.id,
+        committed: locked <= 0 ? 0 : 0.3 + 0.7 * (maxLocked > 0 ? locked / maxLocked : 0),
+        out: !s.active,
+      };
     });
 
     return {
@@ -305,6 +344,7 @@ export function useScene(live: Live, myPolicies?: Policy[]): SceneState {
       towers,
       paidAt: live.paidAt,
       shockAt: live.shockAt,
+      pulses: live.pulses,
     };
-  }, [live.price, live.state, live.gate, live.policies, live.paidAt, live.shockAt, myPolicies]);
+  }, [live.price, live.state, live.gate, live.policies, live.paidAt, live.shockAt, live.pulses, myPolicies]);
 }

@@ -121,7 +121,11 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
     const t0 = Date.now();
     const { play } = depsRef.current;
 
-    /** Poll until `fn` returns something truthy, or throw. Bails out silently if the viewer stops the run. */
+    /**
+     * Poll until `fn` returns something truthy, or throw. Bails out silently if the viewer stops the run.
+     * Pressing Next during a chain-bound wait cuts the sleep and asks the chain again right now, so the
+     * story moves the instant the chain allows instead of on the next poll tick.
+     */
     async function until<T>(
       label: string,
       fn: () => Promise<T | null | undefined | false>,
@@ -129,12 +133,22 @@ export function useDirector(deps: { guest: Guest; live: Live; play: (c: Cue) => 
       every = 2500,
     ): Promise<T> {
       const end = Date.now() + ms;
-      for (;;) {
-        if (!alive()) throw new Cancelled();
-        const v = await fn();
-        if (v) return v as T;
-        if (Date.now() > end) throw new Error(`Timed out waiting for ${label}. The chain may be busy; try again.`);
-        await sleep(every);
+      try {
+        for (;;) {
+          if (!alive()) throw new Cancelled();
+          const v = await fn();
+          if (v) return v as T;
+          if (Date.now() > end) throw new Error(`Timed out waiting for ${label}. The chain may be busy; try again.`);
+          await new Promise<void>((r) => {
+            const t = setTimeout(r, every);
+            advanceRef.current = () => {
+              clearTimeout(t);
+              r();
+            };
+          });
+        }
+      } finally {
+        advanceRef.current = null;
       }
     }
 

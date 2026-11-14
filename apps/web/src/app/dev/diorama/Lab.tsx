@@ -55,6 +55,10 @@ export function Lab() {
     const t = Date.now();
     setS((x) => ({ ...x, shockAt: t, impacts: [...(x.impacts ?? []), t] }));
   };
+  const pulse = (kind: NonNullable<SceneState["pulses"]>[number]["kind"]) =>
+    setS((x) => ({ ...x, pulses: [...(x.pulses ?? []).filter((p) => Date.now() - p.at < 6000), { kind, at: Date.now() }] }));
+  const birth = () =>
+    setS((x) => ({ ...x, houses: [...x.houses, { id: Date.now(), state: "pending" as const, bornAt: Date.now() }].slice(-8) }));
   return (
     <div className="flex h-[100dvh] flex-col">
       <div className="border-line/70 flex flex-wrap items-center gap-3 border-b p-3 text-[0.8125rem]">
@@ -72,6 +76,21 @@ export function Lab() {
         </button>
         <button id="finale" onClick={() => setView({ ...mock, running: false, done: true, refused: null, countdown: null, result: { premium: 0.7, payout: 15, seconds: 147, evmUrl: null, evmSkipped: null } })} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
           Finale
+        </button>
+        <button id="rfq" onClick={() => pulse("rfq")} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
+          RFQ ping
+        </button>
+        <button id="buyp" onClick={() => pulse("buy")} className="bg-blue/20 text-blue-lit rounded px-3 py-1.5">
+          Buy ring
+        </button>
+        <button id="arb" onClick={() => pulse("arb")} className="bg-mint/20 text-mint rounded px-3 py-1.5">
+          Arb calm
+        </button>
+        <button id="keeper" onClick={() => pulse("keeper")} className="bg-ink-3 rounded px-3 py-1.5">
+          Keeper sweep
+        </button>
+        <button id="birth" onClick={birth} className="bg-ink-3 rounded px-3 py-1.5">
+          House drop
         </button>
         <label className="text-mute flex items-center gap-2">
           peg

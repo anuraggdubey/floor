@@ -26,8 +26,8 @@ export interface SceneState {
   band: number;
   /** Cover can be bought right now. */
   gateOpen: boolean;
-  /** Policies standing on the plaza. */
-  houses: Array<{ id: number; state: "pending" | "active" | "paid" | "void" }>;
+  /** Policies standing on the plaza. A house born this session (bornAt > 0) drops in from the sky. */
+  houses: Array<{ id: number; state: "pending" | "active" | "paid" | "void"; bornAt?: number }>;
   /** Solver towers, each with how much of its margin is committed (0..1). */
   towers: Array<{ id: string; committed: number; out: boolean }>;
   /** Timestamp (ms) of the last payout, for the gold burst. */
@@ -36,6 +36,8 @@ export interface SceneState {
   shockAt: number | null;
   /** Timestamps (ms) of recent dumps; each one drops a block into the reservoir and splashes. */
   impacts?: number[];
+  /** Recent chain events the scene acts out: quotes ping the towers, the keeper sweeps, the arb calms the water. */
+  pulses?: Array<{ kind: "rfq" | "buy" | "active" | "keeper" | "arb"; at: number }>;
 }
 
 export const emptyScene: SceneState = {
@@ -147,6 +149,7 @@ export function drawScene(
   drawHouses(ctx, v, s, t, paid);
   if (anySustained) drawCracks(ctx, v, t, stress);
   drawEmbers(ctx, v, t, stress);
+  drawPulses(ctx, v, s, tMs, waterZ);
   for (const at of s.impacts ?? []) if (tMs - at < 3000) drawImpact(ctx, v, tMs - at, at, waterZ);
   if (paid > 0) drawPayoutBurst(ctx, v, paid);
   if (s.paidAt && tMs - s.paidAt < 4200) drawCoins(ctx, v, s, tMs - s.paidAt);
@@ -518,24 +521,45 @@ function box(
 }
 
 function drawHouses(ctx: CanvasRenderingContext2D, v: View, s: SceneState, t: number, paid: number) {
+  const tMs = t * 1000;
   s.houses.slice(0, HOUSE_SPOTS.length).forEach((house, i) => {
     const [x, y] = HOUSE_SPOTS[i]!;
     const lit = house.state === "active" || house.state === "paid";
     const gold = house.state === "paid";
     const h = 0.95;
 
-    box(ctx, v, x, y, 0.95, 0.95, 0, h, "#5c6878", "#2e3742", "#434e5c");
+    // a house bought this session drops out of the sky and lands with a dust ring
+    const age = house.bornAt ? tMs - house.bornAt : Infinity;
+    const DROP = 650;
+    let lift = 0;
+    if (age < DROP) {
+      const k = age / DROP;
+      lift = (1 - k * k) * 5.5; // accelerating fall
+    } else if (age < DROP + 900) {
+      const k = (age - DROP) / 900;
+      const [gx, gy] = iso(v, x + 0.475, y + 0.475, 0.03);
+      ctx.save();
+      ctx.globalAlpha = (1 - k) * 0.8;
+      ctx.strokeStyle = "#cfd8e4";
+      ctx.lineWidth = 2.4 - k * 1.8;
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, v.tw * (0.5 + k * 1.5), v.th * (0.5 + k * 1.5), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    box(ctx, v, x, y, 0.95, 0.95, lift, h + lift, "#5c6878", "#2e3742", "#434e5c");
 
     // roof
-    const apex = iso(v, x + 0.475, y + 0.475, h + 0.62);
-    const r2 = iso(v, x + 0.95, y, h);
-    const r3 = iso(v, x + 0.95, y + 0.95, h);
-    const r4 = iso(v, x, y + 0.95, h);
+    const apex = iso(v, x + 0.475, y + 0.475, lift + h + 0.62);
+    const r2 = iso(v, x + 0.95, y, lift + h);
+    const r3 = iso(v, x + 0.95, y + 0.95, lift + h);
+    const r4 = iso(v, x, y + 0.95, lift + h);
     fillPoly(ctx, [r4, r3, apex], gold ? "#b98f2c" : "#6b7788");
     fillPoly(ctx, [r3, r2, apex], gold ? "#d9a838" : "#8491a3");
 
     // the window: the human signal that someone is home and covered
-    if (lit) {
+    if (lit && age >= DROP) {
       const flick = 0.78 + Math.sin(t * 3 + i * 2.1) * 0.12;
       const wp = iso(v, x + 0.72, y + 0.92, h * 0.5);
       const col = gold ? "255,205,110" : "255,180,84";
@@ -590,6 +614,87 @@ function drawTowers(ctx: CanvasRenderingContext2D, v: View, s: SceneState, t: nu
       ctx.fill();
     }
   });
+}
+
+/**
+ * The chain events, acted out. Quotes ping every tower, a buy rings the plaza, the keeper sends a sweep
+ * across the ground, and the arbitrage bot calms the water in green. Each effect is short and additive, so
+ * several at once read as a busy market rather than noise.
+ */
+function drawPulses(ctx: CanvasRenderingContext2D, v: View, s: SceneState, tMs: number, waterZ: number) {
+  for (const p of s.pulses ?? []) {
+    const age = tMs - p.at;
+
+    if (p.kind === "rfq" && age < 1600) {
+      // each solver tower answers the request: a ring leaves the beacon, staggered per tower
+      TOWER_SPOTS.forEach(([x, y], i) => {
+        const a = (age - i * 140) / 1100;
+        if (a <= 0 || a >= 1) return;
+        const [px, py] = iso(v, x + 0.4, y + 0.4, 2.72);
+        ctx.save();
+        ctx.globalAlpha = (1 - a) * 0.85;
+        ctx.strokeStyle = "#4b8dff";
+        ctx.lineWidth = 2.6 - a * 1.8;
+        ctx.beginPath();
+        ctx.ellipse(px, py, v.tw * (0.3 + a * 2.6), v.th * (0.3 + a * 2.6), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    if ((p.kind === "buy" || p.kind === "active") && age < 1400) {
+      // the newest house announces itself in blue (bought) or mint (live)
+      const idx = Math.min(s.houses.length, HOUSE_SPOTS.length) - 1;
+      if (idx < 0) continue;
+      const [x, y] = HOUSE_SPOTS[idx]!;
+      const a = age / 1400;
+      const [px, py] = iso(v, x + 0.475, y + 0.475, 0.05);
+      ctx.save();
+      ctx.globalAlpha = (1 - a) * 0.9;
+      ctx.strokeStyle = p.kind === "buy" ? "#4b8dff" : "#46e39b";
+      ctx.lineWidth = 3 - a * 2;
+      ctx.beginPath();
+      ctx.ellipse(px, py, v.tw * (0.4 + a * 2.2), v.th * (0.4 + a * 2.2), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (p.kind === "keeper" && age < 1500) {
+      // the keeper walks the plaza: a thin white sweep crossing the ground
+      const a = age / 1500;
+      const d = a * N * 2;
+      ctx.save();
+      ctx.globalAlpha = (1 - a) * 0.5;
+      ctx.strokeStyle = "#f3f2ee";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      const p0 = iso(v, clamp(d, 0, N), clamp(d - N, 0, N), 0);
+      const p1 = iso(v, clamp(d - N, 0, N), clamp(d, 0, N), 0);
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (p.kind === "arb" && age < 2200) {
+      // the arbitrage bot buys the peg back: green rings settle across the water
+      const cx = (B0 + B1) / 2;
+      const cy = (B0 + B1) / 2;
+      const [sx, sy] = iso(v, cx, cy, waterZ);
+      ctx.save();
+      for (let r = 0; r < 3; r++) {
+        const a = (age - r * 260) / 1700;
+        if (a <= 0 || a >= 1) continue;
+        ctx.globalAlpha = (1 - a) * 0.75;
+        ctx.strokeStyle = "#46e39b";
+        ctx.lineWidth = 2.6 - a * 2;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, v.tw * (0.3 + a * 2.8), v.th * (0.3 + a * 2.8), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 /** Deterministic pseudo-random so the cracks are the same every reload. */

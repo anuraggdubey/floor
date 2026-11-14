@@ -143,11 +143,12 @@ export function DirectorOverlay({
                       onNext();
                       e.currentTarget.blur();
                     }}
-                    disabled={!view.canAdvance}
-                    className="bg-blue hover:bg-blue-lit rounded-full px-3.5 py-1.5 text-[0.75rem] font-medium text-white backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-blue"
-                    title={view.canAdvance ? "Next slide (→)" : "Waiting for the chain"}
+                    className={`rounded-full px-3.5 py-1.5 text-[0.75rem] font-medium text-white backdrop-blur-md transition-colors ${
+                      view.canAdvance ? "bg-blue hover:bg-blue-lit" : "bg-blue/60 hover:bg-blue"
+                    }`}
+                    title={view.canAdvance ? "Next slide (→)" : "Ask the chain again now — this wait is the contract's own clock"}
                   >
-                    {view.canAdvance ? "Next →" : "On-chain…"}
+                    Next →
                   </button>
                 </>
               )}
