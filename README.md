@@ -8,7 +8,7 @@ In March 2023 USDC fell to about $0.87 and holders had no cover they could buy i
 |---|---|
 | **Live demo** | https://floorxa.vercel.app |
 | **Demo video** | [Watch on Google Drive](https://drive.google.com/file/d/1lYvC4qibnEfpz2RJsUkKGYo7O_NRkApu/view?usp=sharing) |
-| **Demo post on X** | ADD_X_POST_URL |
+| **Demo post on X** | [Post on X](https://x.com/anuraggdubeyy/status/2121463325758525504) |
 | **Network** | NEAR testnet, plus Ethereum Sepolia for the cross-chain payout |
 | **Tracks** | Unstoppable DeFi (main), Open Innovation, Agent Economy |
 
