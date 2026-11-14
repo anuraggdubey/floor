@@ -52,16 +52,27 @@ export interface Cfg {
 }
 
 export function loadConfig(): Cfg {
-  // rpc.testnet.near.org is deprecated and answers 429 to everything, so it is deliberately NOT a fallback:
-  // failing over to it only replaces a real error with a misleading one. See https://docs.near.org/api/rpc/providers
+  // Every free public RPC rate-limits a single client quickly, so the worker spreads reads and fails writes over
+  // several independent hosts. Order is preference: the first healthy endpoint is used, a rate-limited one is
+  // skipped for a while. NEAR_RPC_URL is tried first; NEAR_RPC_URLS (comma separated) adds more, e.g. a keyed
+  // FastNEAR URL. See https://docs.near.org/api/rpc/providers
   const rpc = opt("NEAR_RPC_URL", "https://test.rpc.fastnear.com");
+  const extra = opt("NEAR_RPC_URLS", "")
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
   return {
     // Hosts such as Render inject PORT; WORKER_PORT wins locally.
     port: Number(opt("WORKER_PORT", opt("PORT", "8787"))),
-    // two endpoints so reads can be spread; free tiers rate-limit a single host quickly
-    rpcUrls: [rpc, "https://test.rpc.fastnear.com", "https://archival-rpc.testnet.fastnear.com"].filter(
-      (v, i, a) => a.indexOf(v) === i,
-    ),
+    rpcUrls: [
+      rpc,
+      ...extra,
+      "https://test.rpc.fastnear.com",
+      "https://near-testnet.drpc.org",
+      "https://near-testnet.gateway.tatum.io",
+      "https://archival-rpc.testnet.fastnear.com",
+      "https://rpc.testnet.near.org", // slow (about 3s) but independent, so it is the last resort
+    ].filter((v, i, a) => a.indexOf(v) === i),
     fusdc: req("FUSDC_CONTRACT"),
     pool: req("POOL_CONTRACT"),
     floor: req("FLOOR_CONTRACT"),

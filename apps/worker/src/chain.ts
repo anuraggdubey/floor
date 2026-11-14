@@ -39,17 +39,59 @@ export function isRateLimited(e: unknown): boolean {
   return /429|rate limit/i.test(m);
 }
 
+/** An endpoint that refused us before doing any work: throttled, unreachable or discontinued. Safe to try elsewhere. */
+export function isEndpointFailure(e: unknown): boolean {
+  const m = String((e as Error)?.message ?? e);
+  return isRateLimited(e) || /fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|(502|503|504)|bad gateway|service unavailable/i.test(m);
+}
+
+/** How long an endpoint that just throttled us is left alone. */
+const COOL_MS = 25_000;
+
 export class Chain {
   private providers: JsonRpcProvider[];
   private accounts = new Map<string, Account>();
+  /** Secret keys by account id, so a transaction can be re-signed through another endpoint. */
+  private keys = new Map<string, string>();
+  /** The same account bound to each endpoint, built on first use. */
+  private perEndpoint = new Map<string, Account>();
   private queues = new Map<string, Promise<unknown>>();
   private rr = 0;
+  /** Per endpoint: do not use it before this time (it just throttled us). */
+  private coolUntil: number[] = [];
   /** Short-lived read cache plus in-flight sharing: ten browsers asking the same question cost one RPC call. */
   private cache = new Map<string, { at: number; value: unknown }>();
   private inflight = new Map<string, Promise<unknown>>();
 
   constructor(private cfg: Cfg) {
     this.providers = cfg.rpcUrls.map((url) => new JsonRpcProvider({ url }));
+    this.coolUntil = this.providers.map(() => 0);
+  }
+
+  /** Endpoint indexes in the order to try them: healthy ones first (rotating, to spread load), cooled-down last. */
+  private order(): number[] {
+    const n = this.providers.length;
+    const now = Date.now();
+    const start = this.rr++ % n;
+    const all = Array.from({ length: n }, (_, i) => (start + i) % n);
+    return [...all.filter((i) => this.coolUntil[i]! <= now), ...all.filter((i) => this.coolUntil[i]! > now)];
+  }
+
+  private cool(i: number) {
+    this.coolUntil[i] = Date.now() + COOL_MS;
+  }
+
+  /** The signer bound to endpoint `i`. Falls back to the caller's own Account when its key is unknown. */
+  private signerAt(signer: Account, i: number): Account {
+    const key = this.keys.get(signer.accountId);
+    if (!key) return signer;
+    const k = `${signer.accountId}@${i}`;
+    let a = this.perEndpoint.get(k);
+    if (!a) {
+      a = new Account(signer.accountId, this.providers[i]!, key as any);
+      this.perEndpoint.set(k, a);
+    }
+    return a;
   }
 
   /**
@@ -71,11 +113,9 @@ export class Chain {
 
     const run = (async () => {
       let lastErr: unknown;
-      const n = this.providers.length;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const start = this.rr++ % n;
-        for (let i = 0; i < n; i++) {
-          const p = this.providers[(start + i) % n]!;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        for (const idx of this.order()) {
+          const p = this.providers[idx]!;
           try {
             const value = (await p.callFunction({ contractId, method, args })) as T | undefined;
             this.cache.set(key, { at: Date.now(), value });
@@ -85,14 +125,15 @@ export class Chain {
             const msg = String((e as Error)?.message ?? e);
             // A contract panic is a real answer, not an RPC outage: do not retry elsewhere.
             if (msg.includes("Smart contract panicked")) throw e;
+            if (isEndpointFailure(e)) this.cool(idx);
           }
         }
         // every endpoint refused: if it looks like rate limiting, wait and try again
-        if (!isRateLimited(lastErr)) break;
-        await sleep(600 * 2 ** attempt);
+        if (!isEndpointFailure(lastErr)) break;
+        await sleep(500 * 2 ** attempt);
       }
       // a stale answer beats an error when the network is merely busy
-      if (hit && isRateLimited(lastErr)) return hit.value as T | undefined;
+      if (hit && isEndpointFailure(lastErr)) return hit.value as T | undefined;
       throw lastErr;
     })().finally(() => this.inflight.delete(key));
     this.inflight.set(key, run);
@@ -100,6 +141,7 @@ export class Chain {
   }
 
   account(id: string, key: string): Account {
+    this.keys.set(id, key);
     let a = this.accounts.get(id);
     if (!a) {
       a = new Account(id, this.providers[0]!, key as any);
@@ -125,9 +167,14 @@ export class Chain {
     opts: { tgas?: number; deposit?: bigint | string } = {},
   ): Promise<TxResult> {
     return this.enqueue(signer.accountId, async () => {
+     const n = this.providers.length;
+     const tried: number[] = [];
      for (let attempt = 0; ; attempt++) {
+      // first healthy endpoint we have not just failed on; once all have been tried, start over after a pause
+      const idx = this.order().find((i) => !tried.includes(i)) ?? this.order()[0]!;
+      tried.push(idx);
       try {
-        const res: any = await signer.callFunctionRaw({
+        const res: any = await this.signerAt(signer, idx).callFunctionRaw({
           contractId,
           methodName,
           args,
@@ -156,8 +203,13 @@ export class Chain {
           error: failure ? JSON.stringify(failure).slice(0, 400) : undefined,
         };
       } catch (e) {
-        if (attempt < 3 && isRateLimited(e)) {
-          await sleep(800 * 2 ** attempt);
+        if (attempt < n + 2 && (isEndpointFailure(e) || /InvalidNonce/i.test(String(e)))) {
+          this.cool(idx);
+          // moving to a different host needs no pause; only a full lap does
+          if (tried.length >= n) {
+            tried.length = 0;
+            await sleep(900);
+          }
           continue;
         }
         return { ok: false, hash: "", logs: [], events: [], error: String((e as Error)?.message ?? e).slice(0, 400) };
