@@ -87,3 +87,6 @@ raw-footage/
 .claude/scratch/
 
 video/
+
+# local tooling (per-machine launch config)
+.claude/

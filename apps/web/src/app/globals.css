@@ -151,6 +151,14 @@ html.lenis body {
     transform: translateX(-50%);
   }
 }
+@keyframes scroll-cue {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
 @keyframes blink {
   0%,
   100% {
@@ -201,6 +209,211 @@ html.lenis body {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
+  .grain,
+  .scroll-progress {
+    display: none;
+  }
+  .magnet > *,
+  .tilt {
+    translate: 0 0;
+    transform: none !important;
+  }
+}
+
+/* ----------------------------------------------------------------- cursor */
+/* A Mac-style arrow, black with a white edge, drawn by the browser so it never trails the hand. */
+@media (pointer: fine) {
+  html,
+  body,
+  a,
+  button,
+  summary,
+  label,
+  [role="button"] {
+    cursor:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M3 2L3 18.5 7.3 14.4 10.4 21 13.4 19.6 10.3 13.1 16 13.1Z' fill='%23000' stroke='%23fff' stroke-width='1.25' stroke-linejoin='round'/></svg>")
+        3 2,
+      auto;
+  }
+  button:disabled,
+  a[aria-disabled="true"] {
+    cursor:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M3 2L3 18.5 7.3 14.4 10.4 21 13.4 19.6 10.3 13.1 16 13.1Z' fill='%23000' stroke='%23fff' stroke-width='1.25' stroke-linejoin='round' opacity='.55'/></svg>")
+        3 2,
+      not-allowed;
+  }
+}
+
+/* ------------------------------------------------------------- atmosphere */
+.grain {
+  position: fixed;
+  inset: -50%;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  animation: grain-shift 1.2s steps(6) infinite;
+}
+@keyframes grain-shift {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-2%, 1%); }
+  40% { transform: translate(1%, -2%); }
+  60% { transform: translate(-1%, 2%); }
+  80% { transform: translate(2%, -1%); }
+  100% { transform: translate(0, 0); }
+}
+
+.scroll-progress {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 70;
+  height: 2px;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, var(--color-blue), var(--color-blue-lit));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-blue-lit) 60%, transparent);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+/* Each route arrives rather than appears. Opacity only: a transform here would turn the wrapper into the
+   containing block for every fixed element inside it (the nav, the flash overlay) and pin them to the page. */
+.page-enter {
+  animation: page-in 0.7s ease-out both;
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ touch */
+/* Buttons give under the finger. `scale` is its own property, so it stacks with any translate the class adds. */
+@layer base {
+  button,
+  a[href] {
+    transition-property: scale;
+    transition-duration: 0.18s;
+    transition-timing-function: var(--ease-out-quint);
+  }
+}
+button:not(:disabled):active,
+a[href]:active {
+  scale: 0.97;
+}
+
+/* Magnetic wrapper (Magnetic.tsx): the child leans toward the pointer and springs back. */
+.magnet > * {
+  translate: var(--mag-x, 0px) var(--mag-y, 0px);
+  transition: translate 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (pointer: coarse) {
+  .magnet > * {
+    translate: 0 0;
+  }
+}
+
+/* Panels tilt a few degrees toward the pointer, on top of the glow they already have. */
+@media (pointer: fine) {
+  .tilt {
+    transform: perspective(1100px) rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
+    transition:
+      transform 0.5s var(--ease-out-quint),
+      border-color 0.5s ease,
+      background-color 0.5s ease;
+    transform-style: preserve-3d;
+  }
+}
+
+/* Nav links draw their underline from the left instead of fading. */
+.link-draw {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-repeat: no-repeat;
+  background-position: left calc(100% + 3px);
+  transition:
+    background-size 0.4s var(--ease-out-quint),
+    color 0.3s ease;
+  padding-bottom: 2px;
+}
+.link-draw:hover {
+  background-size: 100% 1px;
+}
+
+/* A click ripple, for the buttons that do something to the chain. */
+.ripple-host {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.ripple {
+  position: absolute;
+  left: var(--rx);
+  top: var(--ry);
+  width: 0;
+  height: 0;
+  border-radius: 999px;
+  translate: -50% -50%;
+  background: currentColor;
+  opacity: 0.35;
+  pointer-events: none;
+  animation: ripple-out 0.7s var(--ease-out-quint) forwards;
+}
+@keyframes ripple-out {
+  to {
+    width: 32rem;
+    height: 32rem;
+    opacity: 0;
+  }
+}
+
+/* The payout card lands with weight and a single gold ring. */
+@keyframes land {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.75rem) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0.1rem) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes gold-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-amber) 60%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 2.5rem transparent;
+  }
+}
+.paid-card {
+  animation:
+    land 0.7s var(--ease-out-quint) both,
+    gold-ring 1.6s ease-out 0.3s both;
+}
+
+/* Status pills breathe once when they change. */
+@keyframes pill-pop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.pill-pop {
+  animation: pill-pop 0.45s var(--ease-out-quint) both;
 }
 
 /* ------------------------------------------------------------ scrollbars */

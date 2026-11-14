@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Diorama } from "./Diorama";
 import { SplitText } from "./Reveal";
+import { Magnetic } from "./Magnetic";
 import { useLive } from "./LiveProvider";
 import { useScene } from "@/lib/useFloor";
 import { price as fmtPrice } from "@/lib/api";
@@ -14,6 +15,29 @@ export function Hero() {
   const scene = useScene(live);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // the copy drifts up and thins out as you leave the hero, so the diorama gets the last word
+  const copy = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = copy.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const read = () => {
+      raf = 0;
+      const k = Math.min(1, window.scrollY / (window.innerHeight * 0.9));
+      el.style.transform = `translateY(${k * -56}px)`;
+      el.style.opacity = String(1 - k * 0.9);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(read);
+    };
+    read();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
 
   const p = live.price ? live.price.price_e8 / 1e8 : 1;
   const open = live.gate?.open ?? true;
@@ -37,7 +61,7 @@ export function Hero() {
       <div className="from-ink pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t to-transparent" />
       <div className="from-ink/70 pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-gradient-to-b to-transparent" />
 
-      <div className="shell relative">
+      <div ref={copy} className="shell relative will-change-transform">
         {/* live status chip — the proof that this is a real chain, not a mock */}
         <div
           className="border-line/80 bg-ink-2/70 mb-7 inline-flex items-center gap-3 rounded-full border px-3.5 py-1.5 backdrop-blur-md"
@@ -83,19 +107,27 @@ export function Hero() {
           data-reveal
           style={{ ["--reveal-delay" as string]: "520ms" }}
         >
-          <Link
-            href="/play"
-            className="group bg-blue hover:bg-blue-lit inline-flex items-center gap-2 rounded-[4px] px-6 py-3.5 text-[1rem] font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(30,110,243,0.4)]"
-          >
-            Break the peg
-            <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-          </Link>
-          <a
-            href="#how"
-            className="border-line hover:border-mute/70 hover:bg-ink-2 inline-flex items-center rounded-[4px] border px-6 py-3.5 text-[1rem] font-medium transition-all duration-300"
-          >
-            How it works
-          </a>
+          <Magnetic>
+            <Link
+              href="/play"
+              className="group bg-blue hover:bg-blue-lit relative inline-flex items-center gap-2 overflow-hidden rounded-[4px] px-6 py-3.5 text-[1rem] font-medium text-white transition-[background-color,box-shadow] duration-300 hover:shadow-[0_14px_34px_rgba(30,110,243,0.4)]"
+            >
+              <span className="relative z-10">Break the peg</span>
+              <span className="relative z-10 transition-transform duration-300 group-hover:translate-x-1">→</span>
+              <span
+                className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+                aria-hidden="true"
+              />
+            </Link>
+          </Magnetic>
+          <Magnetic strength={0.14}>
+            <a
+              href="#how"
+              className="border-line hover:border-mute/70 hover:bg-ink-2 inline-flex items-center rounded-[4px] border px-6 py-3.5 text-[1rem] font-medium transition-[border-color,background-color] duration-300"
+            >
+              How it works
+            </a>
+          </Magnetic>
         </div>
 
         <p
@@ -111,7 +143,12 @@ export function Hero() {
       <div className="shell pointer-events-none absolute inset-x-0 bottom-8">
         <div className="text-mute/60 flex items-center gap-3">
           <span className="kicker !text-[0.625rem]">Scroll</span>
-          <span className="via-line h-px w-16 bg-gradient-to-r from-transparent to-transparent" />
+          <span className="relative h-px w-16 overflow-hidden">
+            <span
+              className="via-bone/70 absolute inset-y-0 w-10 bg-gradient-to-r from-transparent to-transparent"
+              style={{ animation: "scroll-cue 2.2s var(--ease-smooth) infinite" }}
+            />
+          </span>
         </div>
       </div>
     </section>

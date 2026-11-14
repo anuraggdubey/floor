@@ -1,7 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { api, usdc, shortTx, type Offer, type Policy, type RfqResult } from "@/lib/api";
+
+/** Drop a ripple where the pointer landed; it cleans itself up once the animation ends. */
+function ripple(e: ReactPointerEvent<HTMLElement>) {
+  const host = e.currentTarget;
+  const r = host.getBoundingClientRect();
+  const s = document.createElement("span");
+  s.className = "ripple";
+  s.style.setProperty("--rx", `${e.clientX - r.left}px`);
+  s.style.setProperty("--ry", `${e.clientY - r.top}px`);
+  s.addEventListener("animationend", () => s.remove(), { once: true });
+  host.appendChild(s);
+}
 import type { Live } from "@/lib/useFloor";
 import type { Guest } from "@/lib/useGuest";
 
@@ -19,11 +31,23 @@ export function Panel({
   return (
     <section
       onPointerMove={(e) => {
-        const r = e.currentTarget.getBoundingClientRect();
-        e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
-        e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+        const el = e.currentTarget;
+        const r = el.getBoundingClientRect();
+        const px = e.clientX - r.left;
+        const py = e.clientY - r.top;
+        el.style.setProperty("--mx", `${px}px`);
+        el.style.setProperty("--my", `${py}px`);
+        if (e.pointerType === "mouse") {
+          // a couple of degrees, away from the pointer, like a card resting on a fingertip
+          el.style.setProperty("--rx", `${((px / r.width - 0.5) * 3).toFixed(2)}deg`);
+          el.style.setProperty("--ry", `${((0.5 - py / r.height) * 3).toFixed(2)}deg`);
+        }
       }}
-      className={`glow rounded-xl border p-5 transition-colors duration-500 ${
+      onPointerLeave={(e) => {
+        e.currentTarget.style.setProperty("--rx", "0deg");
+        e.currentTarget.style.setProperty("--ry", "0deg");
+      }}
+      className={`glow tilt rounded-xl border p-5 ${
         tone === "danger" ? "border-blood/30 bg-blood/[0.04]" : "border-line/80 bg-ink-2/70"
       }`}
     >
@@ -116,21 +140,24 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
       </p>
 
       <button
+        onPointerDown={ripple}
         onClick={getQuotes}
         disabled={disabled || busy !== null}
-        className="bg-blue hover:bg-blue-lit mt-4 w-full rounded-lg py-3 text-[0.9375rem] font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+        className="ripple-host bg-blue hover:bg-blue-lit mt-4 w-full rounded-lg py-3 text-[0.9375rem] font-medium text-white transition-[background-color,box-shadow] duration-300 hover:shadow-[0_10px_28px_rgba(30,110,243,0.3)] disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy === "quote" ? "Asking solvers…" : "Get quotes"}
       </button>
 
       {rfq && (
         <div className="mt-4 space-y-2">
-          {rfq.offers.map((o) => (
+          {rfq.offers.map((o, i) => (
             <button
               key={o.solver}
+              onPointerDown={ripple}
               onClick={() => void buy(o)}
               disabled={busy !== null}
-              className={`group flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition-all disabled:opacity-50 ${
+              style={{ animation: `rise 0.6s var(--ease-out-quint) ${i * 90}ms both` }}
+              className={`ripple-host group flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition-[background-color,border-color,translate] duration-300 hover:-translate-y-px disabled:opacity-50 ${
                 o.solver === rfq.best
                   ? "border-mint/50 bg-mint/[0.07] hover:bg-mint/[0.12]"
                   : "border-line hover:border-mute/60"
@@ -155,8 +182,12 @@ export function BuyPanel({ live, guest }: { live: Live; guest: Guest }) {
               </div>
             </button>
           ))}
-          {rfq.declined.map((d) => (
-            <div key={d.solver} className="border-line/60 rounded-lg border border-dashed p-3">
+          {rfq.declined.map((d, i) => (
+            <div
+              key={d.solver}
+              style={{ animation: `rise 0.6s var(--ease-out-quint) ${(rfq.offers.length + i) * 90}ms both` }}
+              className="border-line/60 rounded-lg border border-dashed p-3"
+            >
               <p className="text-mute text-[0.875rem]">
                 <span className="text-bone/70">{d.name}</span>{d.ai && <span className="text-blue-lit"> (AI agent)</span>} declined — {d.reason}
               </p>
@@ -220,9 +251,10 @@ export function DumpPanel({ live, guest }: { live: Live; guest: Guest }) {
         {[5_000, 25_000, 50_000].map((v) => (
           <button
             key={v}
+            onPointerDown={ripple}
             onClick={() => void dump(v)}
             disabled={disabled}
-            className="border-blood/40 bg-blood/10 hover:bg-blood/20 text-blood tnum rounded-lg border py-3 text-[0.9375rem] font-semibold transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+            className="ripple-host border-blood/40 bg-blood/10 hover:bg-blood/20 text-blood tnum rounded-lg border py-3 text-[0.9375rem] font-semibold transition-[background-color,border-color,translate,box-shadow] duration-300 hover:-translate-y-px hover:shadow-[0_10px_28px_rgba(255,68,56,0.22)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {(v / 1000).toFixed(0)}k
           </button>
@@ -260,7 +292,7 @@ export function PolicyList({ policies, mine }: { policies: Policy[]; mine: strin
               <li key={p.id} className="border-line/70 bg-ink/50 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[0.9375rem] font-medium">#{p.id}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[0.6875rem] ${STATUS_TONE[p.status]}`}>
+                  <span key={p.status} className={`pill-pop rounded-full border px-2 py-0.5 text-[0.6875rem] ${STATUS_TONE[p.status]}`}>
                     {p.status === "PaidOut" ? "paid out" : p.status.toLowerCase()}
                   </span>
                 </div>

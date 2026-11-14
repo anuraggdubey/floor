@@ -14,6 +14,7 @@ import { Odometer } from "@/components/Odometer";
 import { LiveNote } from "@/components/LiveStatus";
 import { useDirector } from "@/lib/useDirector";
 import { useSound } from "@/lib/sfx";
+import { Magnetic } from "@/components/Magnetic";
 
 export function PlayClient() {
   const guest = useGuest();
@@ -134,13 +135,14 @@ export function PlayClient() {
           </Link>
 
           <div className="flex items-center gap-2 md:gap-4">
+            <Magnetic strength={0.16}>
             <button
               onClick={() => {
                 setDismissed(false);
                 void director.start();
               }}
               disabled={director.view.running}
-              className="group bg-blue hover:bg-blue-lit relative overflow-hidden rounded-full px-4 py-1.5 text-[0.8125rem] font-medium text-white transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+              className="group bg-blue hover:bg-blue-lit relative overflow-hidden rounded-full px-4 py-1.5 text-[0.8125rem] font-medium text-white transition-[background-color,box-shadow] duration-300 hover:shadow-[0_8px_24px_rgba(30,110,243,0.35)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="relative z-10 flex items-center gap-2">
                 <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" fill="currentColor" aria-hidden="true">
@@ -153,6 +155,7 @@ export function PlayClient() {
                 aria-hidden="true"
               />
             </button>
+            </Magnetic>
             {guest.accountId ? (
               <>
                 <div className="hidden items-baseline gap-2 sm:flex">
@@ -230,7 +233,8 @@ export function PlayClient() {
                 )}
               </p>
               <p
-                className={`mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[0.75rem] ${
+                key={gateLabel}
+                className={`pill-pop mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[0.75rem] ${
                   !known
                     ? "border-line text-mute"
                     : sellable
@@ -243,7 +247,10 @@ export function PlayClient() {
             </div>
 
             {paidTotal > 0 && (
-              <div className="border-amber/50 bg-amber/10 rounded-xl border px-4 py-3 text-right backdrop-blur-md">
+              <div
+                key={paidTotal}
+                className="paid-card border-amber/50 bg-amber/10 rounded-xl border px-4 py-3 text-right backdrop-blur-md"
+              >
                 <p className="kicker !text-amber/70">Paid to you</p>
                 <p className="tnum text-amber mt-1 text-[1.5rem] leading-none">+{usdc(paidTotal)}</p>
               </div>
@@ -285,7 +292,7 @@ export function PlayClient() {
           }`}
         >
           {!guest.accountId ? (
-            <div className="border-line/80 bg-ink-2/70 rounded-xl border p-6">
+            <div className="border-line/80 bg-ink-2/70 rounded-xl border p-6" style={{ animation: "rise 0.7s var(--ease-out-quint) both" }}>
               <h2 className="display-md">Step inside.</h2>
               <p className="text-mute mt-3 text-[0.9375rem] leading-relaxed">
                 We&apos;ll make you a real NEAR testnet account and fund it with demo credits. No wallet, no seed
@@ -294,9 +301,13 @@ export function PlayClient() {
               <button
                 onClick={() => void guest.start()}
                 disabled={guest.loading}
-                className="bg-blue hover:bg-blue-lit mt-5 w-full rounded-lg py-3.5 text-[1rem] font-medium text-white transition-colors disabled:opacity-50"
+                className="group bg-blue hover:bg-blue-lit relative mt-5 w-full overflow-hidden rounded-lg py-3.5 text-[1rem] font-medium text-white transition-[background-color,box-shadow] duration-300 hover:shadow-[0_12px_30px_rgba(30,110,243,0.35)] disabled:opacity-50"
               >
-                {guest.loading ? "Creating your account… (up to 30s)" : "Give me an account"}
+                <span
+                  className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+                  aria-hidden="true"
+                />
+                <span className="relative">{guest.loading ? "Creating your account… (up to 30s)" : "Give me an account"}</span>
               </button>
               <button
                 onClick={() => {

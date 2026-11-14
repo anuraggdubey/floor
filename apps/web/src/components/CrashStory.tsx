@@ -36,6 +36,10 @@ export function CrashStory() {
   const [ref, progress] = useScrollProgress<HTMLDivElement>();
   // the drawing happens over the middle of the scroll, so the headline lands first
   const t = Math.max(0, Math.min(1, (progress - 0.18) / 0.5));
+  // hand over, never overlap: the words clear out before the chart takes the stage
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const words = 1 - clamp01((progress - 0.15) / 0.12);
+  const chart = clamp01((progress - 0.25) / 0.12);
 
   const d = PATH.map(([h, p], i) => `${i === 0 ? "M" : "L"}${x(h).toFixed(1)} ${y(p).toFixed(1)}`).join(" ");
   const len = 2600; // generous upper bound for the stroke length
@@ -44,8 +48,8 @@ export function CrashStory() {
     <section ref={ref} id="why" className="relative h-[230vh]">
       <div className="sticky top-0 flex h-[100svh] flex-col justify-center overflow-hidden">
         {/* the chart, behind the words */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <svg viewBox={`0 0 ${W} ${H}`} className="h-[62%] w-full max-w-[80rem] px-6 opacity-90" aria-hidden="true">
+        <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: chart * 0.95 }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="h-[62%] w-full max-w-[80rem] px-6" aria-hidden="true">
             <defs>
               <linearGradient id="crashFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#ff4438" stopOpacity="0.22" />
@@ -110,7 +114,10 @@ export function CrashStory() {
         </div>
 
         {/* the words, over the chart */}
-        <div className="shell pointer-events-none relative text-center">
+        <div
+          className="shell pointer-events-none relative text-center will-change-[opacity,transform]"
+          style={{ opacity: words, transform: `translateY(${(1 - words) * -28}px)`, filter: words < 1 ? `blur(${(1 - words) * 6}px)` : undefined }}
+        >
           <p className="kicker" data-reveal>
             March 2023 · stylised from the public record, not a price feed
           </p>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LogoMark } from "./Logo";
 import { Doorway } from "./Doorway";
 import { Crowd } from "./Crowd";
+import { Magnetic } from "./Magnetic";
 
 const COLUMNS: Array<{ title: string; links: Array<{ label: string; href: string; external?: boolean }> }> = [
   {
@@ -64,6 +65,7 @@ export function PreFooter() {
         </div>
 
         <div className="mt-12" data-reveal style={{ ["--reveal-delay" as string]: "320ms" }}>
+          <Magnetic className="inline-block" strength={0.2}>
           <Link
             href="/play"
             className="group inline-flex items-center gap-2.5 rounded-[5px] border-t border-white/80 bg-[#dae0e5] px-8 py-4 text-[1.0625rem] font-semibold text-black shadow-[0_6px_0_0_#8f9aa3,0_18px_34px_rgba(0,0,0,0.35)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_0_0_#8f9aa3,0_22px_40px_rgba(0,0,0,0.4)] active:translate-y-1 active:shadow-[0_2px_0_0_#8f9aa3,0_10px_20px_rgba(0,0,0,0.3)]"
@@ -71,6 +73,7 @@ export function PreFooter() {
             Break the peg
             <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
           </Link>
+          </Magnetic>
         </div>
       </div>
     </section>
@@ -99,12 +102,12 @@ export function Footer() {
                           href={l.href}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="text-[0.9375rem] font-medium text-white transition-opacity hover:opacity-65"
+                          className="link-draw text-[0.9375rem] font-medium text-white hover:opacity-80"
                         >
                           {l.label}
                         </a>
                       ) : (
-                        <Link href={l.href} className="text-[0.9375rem] font-medium text-white transition-opacity hover:opacity-65">
+                        <Link href={l.href} className="link-draw text-[0.9375rem] font-medium text-white hover:opacity-80">
                           {l.label}
                         </Link>
                       )}

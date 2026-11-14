@@ -3,6 +3,7 @@ import { Schibsted_Grotesk, Instrument_Serif, JetBrains_Mono } from "next/font/g
 import "./globals.css";
 import { SmoothScroll } from "@/components/SmoothScroll";
 import { RevealProvider } from "@/components/Reveal";
+import { Atmosphere } from "@/components/Atmosphere";
 
 const grotesk = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-grotesk", display: "swap" });
 const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", variable: "--font-serif", display: "swap" });
@@ -40,7 +41,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-ink text-bone antialiased">
         <SmoothScroll />
         <RevealProvider />
-        {children}
+        <Atmosphere />
+        <div className="page-enter">{children}</div>
       </body>
     </html>
   );
