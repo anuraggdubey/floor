@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isqrt, maxSwap, usdNeededToRestore } from "../src/arb.js";
+import { dusdNeededToRestore, isqrt, maxSwap, usdNeededToRestore } from "../src/arb.js";
 import { deepestTier, planActions, type PolicyView } from "../src/keeper.js";
 import { decrypt, encrypt } from "../src/guests.js";
 import { isRateLimited, parseEvents } from "../src/chain.js";
@@ -126,5 +126,21 @@ describe("rate-limit detection", () => {
   it("does not mistake a real contract failure for throttling", () => {
     expect(isRateLimited(new Error("Smart contract panicked: GATE_CLOSED"))).toBe(false);
     expect(isRateLimited(new Error("account does not exist"))).toBe(false);
+  });
+});
+
+describe("arb sells back an over-peg pool", () => {
+  it("returns the price to about $1.00", () => {
+    const usd = 1_041_902_604_768n;
+    const dusd = 959_782_608_709n;
+    const sell = dusdNeededToRestore(usd, dusd);
+    expect(sell > 0n).toBe(true);
+    const newDusd = dusd + sell;
+    const newUsd = (usd * dusd) / newDusd; // the pool pays USD out when it takes dUSD in
+    const price = (newUsd * 100_000_000n) / newDusd;
+    expect(price >= 99_990_000n && price <= 100_010_000n).toBe(true);
+  });
+  it("does nothing when the price is at or below the peg", () => {
+    expect(dusdNeededToRestore(900n, 1000n)).toBe(0n);
   });
 });

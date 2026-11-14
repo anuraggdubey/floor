@@ -14,7 +14,7 @@ const COLUMNS: Array<{ title: string; links: Array<{ label: string; href: string
   {
     title: "Build",
     links: [
-      { label: "Source", href: "https://github.com", external: true },
+      { label: "Source", href: "https://github.com/anuraggdubey/floor", external: true },
       { label: "What's verified", href: "/#honest" },
     ],
   },

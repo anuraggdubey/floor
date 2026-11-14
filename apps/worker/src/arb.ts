@@ -33,14 +33,33 @@ export function usdNeededToRestore(reserveUsd: bigint, reserveDusd: bigint, targ
   return need > 0n ? need : 0n;
 }
 
+/** dUSD units to sell so the pool comes back down to `targetE8` after someone pushed the price above the peg. */
+export function dusdNeededToRestore(reserveUsd: bigint, reserveDusd: bigint, targetE8 = PRICE_ONE): bigint {
+  const k = reserveUsd * reserveDusd;
+  const target = isqrt((k * PRICE_ONE) / targetE8);
+  const need = target - reserveDusd;
+  return need > 0n ? need : 0n;
+}
+
+/** Above this the demo stable looks broken the other way, so the bot sells it back down. */
+export const UPPER_BAND_E8 = 102_000_000;
+const UPPER_DELAY_SECS = 30;
+
 /** Largest single swap the pool will accept given the USD-side reserve. */
 export function maxSwap(reserveUsd: bigint): bigint {
   return (reserveUsd * MAX_SWAP_BPS) / 10_000n;
 }
 
+function usdNeededToRestoreUp(snap: { reserve_usd: string; reserve_dusd: string }): bigint {
+  const need = dusdNeededToRestore(BigInt(snap.reserve_usd), BigInt(snap.reserve_dusd));
+  const cap = (BigInt(snap.reserve_dusd) * MAX_SWAP_BPS) / 10_000n;
+  return need < cap ? need : cap;
+}
+
 export function startArb(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
   const acct = chain.account(cfg.arb.id, cfg.arb.key);
   let breachSince: number | null = null;
+  let overSince: number | null = null;
   let busy = false;
   let enabled = true;
   /** When our last buy went out. The price feed polls every few seconds, so acting again on a snapshot older
@@ -53,6 +72,23 @@ export function startArb(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
     if (!snap) return;
     const now = Date.now();
     if (snap.t <= lastBuyAt + 1500) return; // wait for a price that reflects our last buy
+    if (snap.price_e8 > UPPER_BAND_E8) {
+      breachSince = null;
+      overSince ??= now;
+      if ((now - overSince) / 1000 < UPPER_DELAY_SECS) return;
+      busy = true;
+      try {
+        const need = usdNeededToRestoreUp(snap);
+        if (need === 0n) return;
+        const r = await chain.send(acct, cfg.pool, "sell_dusd", { amount: need.toString() }, { tgas: 30 });
+        lastBuyAt = Date.now();
+        bus.emit("arb", { ok: r.ok, sold_dusd: need.toString(), tx: r.hash, error: r.error });
+      } finally {
+        busy = false;
+      }
+      return;
+    }
+    overSince = null;
     if (snap.price_e8 >= BAND_E8) {
       breachSince = null;
       return;
@@ -77,7 +113,10 @@ export function startArb(chain: Chain, cfg: Cfg, feed: PriceFeed, bus: Bus) {
     stop: () => clearInterval(timer),
     setEnabled: (v: boolean) => {
       enabled = v;
-      if (!v) breachSince = null;
+      if (!v) {
+        breachSince = null;
+        overSince = null;
+      }
     },
   };
 }
