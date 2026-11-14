@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="Floor architecture: a holder buys cover with a signed quote from three AI underwriters. The floor contract on NEAR testnet reads its price from the peg pool, pays the holder, and asks Chain Signatures to sign a USDC payout on Ethereum Sepolia." font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="h" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#8d939c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="hb" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#4b8dff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="hy" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#ffb454" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+
+  <rect width="1200" height="340" rx="18" fill="#0a0b0d"/>
+  <rect x=".5" y=".5" width="1199" height="339" rx="17.5" fill="none" stroke="#23272e"/>
+
+  <!-- the NEAR zone, drawn as a quiet dashed frame -->
+  <rect x="376" y="40" width="590" height="260" rx="16" fill="none" stroke="#2c3138" stroke-dasharray="3 7"/>
+  <text x="396" y="66" fill="#5d646e" font-size="11" letter-spacing="3">NEAR TESTNET</text>
+
+  <!-- nodes -->
+  <g>
+    <rect x="40" y="108" width="196" height="76" rx="14" fill="#101216" stroke="#23272e"/>
+    <text x="64" y="142" fill="#f3f2ee" font-size="18" font-weight="600">Holder</text>
+    <text x="64" y="165" fill="#8d939c" font-size="13">browser, no wallet</text>
+
+    <rect x="404" y="108" width="236" height="76" rx="14" fill="#101216" stroke="#1e6ef3"/>
+    <text x="428" y="142" fill="#f3f2ee" font-size="18" font-weight="600">floor</text>
+    <text x="428" y="165" fill="#8d939c" font-size="13">verifies, locks margin, pays</text>
+
+    <rect x="690" y="108" width="132" height="76" rx="14" fill="#101216" stroke="#23272e"/>
+    <text x="710" y="142" fill="#f3f2ee" font-size="16" font-weight="600">Signer</text>
+    <text x="710" y="165" fill="#8d939c" font-size="13">NEAR MPC</text>
+
+    <rect x="1010" y="108" width="150" height="76" rx="14" fill="#101216" stroke="#ffb454"/>
+    <text x="1032" y="142" fill="#f3f2ee" font-size="18" font-weight="600">USDC</text>
+    <text x="1032" y="165" fill="#8d939c" font-size="13">Ethereum Sepolia</text>
+
+    <rect x="40" y="226" width="196" height="56" rx="14" fill="#101216" stroke="#23272e"/>
+    <text x="64" y="250" fill="#f3f2ee" font-size="15" font-weight="600">3 AI underwriters</text>
+    <text x="64" y="269" fill="#8d939c" font-size="12.5">own margin, signed quotes</text>
+
+    <rect x="404" y="226" width="236" height="56" rx="14" fill="#101216" stroke="#23272e"/>
+    <text x="428" y="250" fill="#f3f2ee" font-size="15" font-weight="600">peg-pool</text>
+    <text x="428" y="269" fill="#8d939c" font-size="12.5">demo stable, the price source</text>
+  </g>
+
+  <!-- lines -->
+  <g fill="none" stroke-width="1.6" stroke-linecap="round">
+    <path d="M240 132H398" stroke="#4b8dff" marker-end="url(#hb)"/>
+    <path d="M398 160H240" stroke="#8d939c" marker-end="url(#h)"/>
+    <path d="M644 146H684" stroke="#ffb454" marker-end="url(#hy)"/>
+    <path d="M826 146H1004" stroke="#ffb454" stroke-dasharray="1 7" marker-end="url(#hy)"/>
+    <path d="M138 222V190" stroke="#8d939c" marker-end="url(#h)"/>
+    <path d="M522 222V190" stroke="#8d939c" marker-end="url(#h)"/>
+  </g>
+
+  <!-- the few words that matter -->
+  <g fill="#8d939c" font-size="12.5">
+    <text x="319" y="124" text-anchor="middle" fill="#4b8dff">buy with a quote</text>
+    <text x="319" y="180" text-anchor="middle">pays the holder</text>
+    <text x="664" y="136" text-anchor="middle" fill="#ffb454" font-size="11.5">sign</text>
+    <text x="915" y="136" text-anchor="middle" fill="#ffb454">payout, no bridge</text>
+    <text x="152" y="210">quotes</text>
+    <text x="536" y="210">price</text>
+  </g>
+
+  <text x="40" y="322" fill="#5d646e" font-size="11.5" letter-spacing="2">EVERY ARROW IS A REAL TRANSACTION YOU CAN OPEN IN THE EXPLORER</text>
+</svg>
