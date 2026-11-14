@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
 import { Magnetic } from "./Magnetic";
+import { ThemeIconToggle } from "./ThemeToggle";
 
 /**
  * Sticky top bar: mark on the left, section links through the middle, one bright action on the right.
@@ -58,6 +59,8 @@ export function Nav({ cta = { href: "/play", label: "Break the peg" } }: { cta?:
           </Link>
         </div>
 
+        <div className="flex items-center gap-3">
+          <ThemeIconToggle />
         <Magnetic strength={0.18}>
           <Link
             href={cta.href}
@@ -66,6 +69,7 @@ export function Nav({ cta = { href: "/play", label: "Break the peg" } }: { cta?:
             {cta.label}
           </Link>
         </Magnetic>
+        </div>
       </nav>
     </header>
   );

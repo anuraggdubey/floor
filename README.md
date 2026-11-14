@@ -54,11 +54,11 @@ The real app, running on NEAR testnet.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/play.jpg" alt="Play page with three AI underwriter quotes" /><br /><sub><b>Break the peg.</b> Three AI underwriters quote, with their reasoning, and the world reacts to every chain event.</sub></td>
+    <td width="50%"><img src="docs/screenshots/play-light.jpg" alt="The play page in light mode" /><br /><sub><b>Break the peg, in light mode.</b> The live world reacts to every chain event. Dark and light are one tap apart.</sub></td>
     <td width="50%"><img src="docs/screenshots/time-machine.jpg" alt="Time machine replay of the March 2023 depeg" /><br /><sub><b>Time machine.</b> The real March 2023 crash, replayed against the same market.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/docs.jpg" alt="The documentation page" /><br /><sub><b>Docs.</b> The cover lifecycle, parameters, contracts, API and how to run it.</sub></td>
+    <td width="50%"><img src="docs/screenshots/docs-light.jpg" alt="The documentation page in light mode" /><br /><sub><b>Docs, in light mode.</b> The cover lifecycle, parameters, contracts, API and how to run it.</sub></td>
     <td width="50%"><img src="docs/screenshots/footer.jpg" alt="Footer with contracts, sources and stack" /><br /><sub><b>Contracts and sources</b> linked from every page.</sub></td>
   </tr>
 </table>
