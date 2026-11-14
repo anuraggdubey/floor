@@ -99,11 +99,23 @@ Three Rust contracts hold all money logic. The worker only quotes, polls prices 
 ## On-chain proof (NEAR testnet)
 | Contract | Account | Deployed code hash | Role |
 |---|---|---|---|
-| `floor` | [`floorxa-floor.testnet`](https://testnet.nearblocks.io/address/floorxa-floor.testnet) | `5rT41JtvjPFyNDAEDo19afjgazR9uvRzcBCE8RZ8ipZr` | cover market: quote verification, gate, triggers, payouts, EVM payout |
+| `floor` | [`floorxa-floor.testnet`](https://testnet.nearblocks.io/address/floorxa-floor.testnet) | `9cts95HgbR4cpUDDjeGrUhmmkaAuHM1vodaCdT1RAbgM` | cover market: quote verification, gate, triggers, payouts, EVM payout |
 | `peg-pool` | [`floorxa-pool.testnet`](https://testnet.nearblocks.io/address/floorxa-pool.testnet) | `9A4xxa9wiF5uyPhA7izEWjme2S77ovZCNxrcJYn4fuW6` | dumpable demo stable pair that the price comes from |
 | `fusdc` | [`floorxa-fusdc.testnet`](https://testnet.nearblocks.io/address/floorxa-fusdc.testnet) | `68sTUKw9B3s8bjR3GtkohVtdaduZSXzJke4srhqYqYCk` | NEP-141 demo money |
 
-The hashes are of the build deployed on testnet; check them against the explorer. Later changes on `main` are in the commit history.
+These are the final builds, matching `main`. `floor` was redeployed in place on 2026-11-15 ([`CYUK9ZK7…1W`](https://testnet.nearblocks.io/txns/CYUK9ZK7kQXhkGJrtZmx1wSThDQEr4cjrRsL6k7BXH1W)), replacing code hash `5rT41Jtv…8ipZr`. Contract state was kept, so every policy, solver margin and payout below is still on the same account.
+
+**Lifetime activity on `floorxa-floor.testnet`** (read from contract state, 2026-11-15):
+| | |
+|---|---|
+| Policies bought | 20 (10 paid out, 7 expired, 3 void) |
+| Premiums collected | 23.00 fUSDC |
+| Paid to holders on NEAR | 119.00 fUSDC |
+| Ethereum Sepolia payouts | 4 confirmed, 5 USDC each (20 USDC), all through Chain Signatures |
+| Underwriters | 3, each with its own NEAR account and locked margin |
+| Open cover right now | none (locked margin 0) |
+
+Every one of these is a transaction on the account, so the full list is on the [explorer page](https://testnet.nearblocks.io/address/floorxa-floor.testnet); the cycle below is one of them.
 
 Underwriters (`floorxa-solver-a/b/c.testnet`), the keeper, the arbitrage bot and each guest are separate accounts. Read the live state yourself, no keys needed:
 ```bash
@@ -147,7 +159,6 @@ scripts/      end-to-end and helper scripts
 ```
 
 ## Roadmap
-- Redeploy the latest contract build and refresh the code hashes above.
 - Bind the quote signature to the contract account.
 - TWAP price source, swap fees and deeper liquidity in place of a spot read.
 - Real USDC and a real peg pool with mainnet-grade liquidity.
