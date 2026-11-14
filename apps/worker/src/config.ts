@@ -95,7 +95,8 @@ export function loadConfig(): Cfg {
     // near-api-js checks balance >= prepaid gas * ~10x gas price before sending, so a guest needs about 0.1 NEAR
     // of headroom per 100 Tgas call even though far less is burned. 0.3 NEAR each, 25 guests = 7.5 NEAR from the parent.
     guestNear: opt("GUEST_NEAR", "0.3"),
-    maxGuests: Number(opt("MAX_GUESTS", "25")),
+    // each guest costs 0.3 NEAR from the guests account, so keep this in line with what that account holds
+    maxGuests: Number(opt("MAX_GUESTS", "60")),
     stateDir: path.join(REPO_ROOT, ".floor-state"),
     explorer: "https://explorer.testnet.near.org",
     evmRpcUrl: opt("EVM_RPC_URL", ""),
