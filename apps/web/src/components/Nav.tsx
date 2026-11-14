@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
 import { Magnetic } from "./Magnetic";
@@ -12,6 +13,9 @@ import { Magnetic } from "./Magnetic";
 export function Nav({ cta = { href: "/play", label: "Break the peg" } }: { cta?: { href: string; label: string } }) {
   const [solid, setSolid] = useState(false);
   const [hidden, setHidden] = useState(false);
+  // On the landing page the section links are in-page anchors; from any other page they lead back to it.
+  const pathname = usePathname();
+  const home = pathname === "/" ? "" : "/";
 
   useEffect(() => {
     let last = window.scrollY;
@@ -43,18 +47,15 @@ export function Nav({ cta = { href: "/play", label: "Break the peg" } }: { cta?:
           <Link href="/time-machine" className="link-draw text-amber hover:text-bone">
             Time machine
           </Link>
-          <a href="#how" className="link-draw hover:text-bone">
+          <a href={`${home}#how`} className="link-draw hover:text-bone">
             How it works
           </a>
-          <a href="#market" className="link-draw hover:text-bone">
-            The market
-          </a>
-          <a href="#near" className="link-draw hover:text-bone">
+          <a href={`${home}#near`} className="link-draw hover:text-bone">
             On NEAR
           </a>
-          <a href="#honest" className="link-draw hover:text-bone">
-            Honest limits
-          </a>
+          <Link href="/docs" className={`link-draw hover:text-bone ${pathname === "/docs" ? "text-bone" : ""}`}>
+            Docs
+          </Link>
         </div>
 
         <Magnetic strength={0.18}>
