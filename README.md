@@ -1,5 +1,11 @@
 # Floor
 
+[![CI](https://github.com/anuraggdubey/floor/actions/workflows/ci.yml/badge.svg)](https://github.com/anuraggdubey/floor/actions/workflows/ci.yml)
+![NEAR testnet](https://img.shields.io/badge/NEAR-testnet-00ec97)
+![Rust near-sdk 5](https://img.shields.io/badge/Rust-near--sdk%205-orange)
+![Tests](https://img.shields.io/badge/tests-55%20contract%20%7C%2052%20worker-brightgreen)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Stablecoin depeg cover that pays itself.** AI underwriters compete to back your cover with their own locked margin. NEAR contracts verify every quote, enforce the rules, and pay you automatically when the peg breaks: no claim form, no committee. Built for **NEAR HACKATHON 2026**.
 
 In March 2023 USDC fell to about $0.87 and holders had no cover they could buy in time. Pooled crypto cover stays small because capital is scarce and risk is hard to price. Floor turns underwriting into a live competition and moves enforcement into contracts.
@@ -12,6 +18,8 @@ In March 2023 USDC fell to about $0.87 and holders had no cover they could buy i
 | **Backend health** | https://floor-p17j.onrender.com/api/health |
 | **Network** | NEAR testnet, plus Ethereum Sepolia for the cross-chain payout |
 | **Tracks** | Unstoppable DeFi (main), Open Innovation, Agent Economy |
+
+**Jump to:** [Try it](#try-it-in-2-minutes) · [Why it matters](#why-it-matters) · [How it works](#how-it-works) · [Architecture](#architecture) · [NEAR features](#near-features-used) · [On-chain proof](#on-chain-proof-near-testnet) · [Verify locally](#run-and-verify-it-locally) · [Limits](#scope-and-limits) · [Roadmap](#roadmap)
 
 <table>
   <tr>
@@ -34,6 +42,21 @@ In March 2023 USDC fell to about $0.87 and holders had no cover they could buy i
 
 **`/time-machine`** replays the real March 2023 USDC/USDT crash (Binance 15-minute candles) against the same market. It is a simulation on real data; no transaction is made.
 
+## Why it matters
+- **The problem has a price tag.** USDC traded near $0.87 in March 2023. Holders using it as treasury or collateral either took the loss or had no cover to buy in time. Depeg cover mostly exists as pooled mutual cover, where capital is scarce, pricing is slow and claims need a vote.
+- **The fix is structural.** Underwriters compete on price and put their own margin behind each quote. A contract, not a committee, decides whether the peg broke and who gets paid.
+- **Every step is checkable.** Quotes are ed25519 signatures verified in Rust, payouts come from locked margin, and each action is a NEAR transaction you can open.
+
+| | Pooled mutual cover | Oracle-only parametric | **Floor** |
+|---|---|---|---|
+| Who prices risk | Pool governance, slowly | A fixed formula | Competing underwriters, per quote |
+| Who backs a policy | Everyone in a shared pool | A shared pool | One underwriter's locked margin |
+| How a claim resolves | Claim, vote, wait | Oracle trigger | Contract trigger on a sustained on-chain price |
+| Manipulation guard | Governance | Oracle design | State gate, sustained breach, settlement delay |
+| Cross-chain payout | Rare | Rare | USDC on Ethereum Sepolia via Chain Signatures |
+
+A design comparison of approaches, not a claim about any named product.
+
 ## How it works
 ```
 holder ──RFQ──▶ worker ──▶ 3 AI underwriters (own NEAR accounts, own margin, own ed25519 quote keys)
@@ -48,6 +71,21 @@ price under a tier line for sustain_secs (+ settle_secs) ──▶ anyone calls 
 - **State gate:** price in band at purchase and activation, a lookback with no breach, and a wait before activation. Late buyers are refused and refunded on-chain.
 - **Sustained breach:** a flash dump that recovers pays nothing. A settlement delay stops anyone locking in the shallowest tier by triggering early.
 - **AI underwriters:** each is its own NEAR account. The LLM (Groq) only chooses a premium rate, clamped to hard bounds; the contract decides everything that moves money. If the model is slow or unusable, a scripted strategy answers and the offer is labelled `scripted`.
+
+## Architecture
+```mermaid
+flowchart LR
+  H[Holder] -->|RFQ| W[Worker API]
+  W --> U[3 AI underwriters<br/>own NEAR accounts and keys]
+  U -->|signed quote| H
+  H -->|ft_transfer_call: premium + quote| F[floor contract]
+  P[peg-pool<br/>dumpable demo stable] -->|price| F
+  K[Keeper] -->|trigger| F
+  F -->|payout from locked margin| H
+  F -.->|optional: sign EVM tx| M[NEAR MPC signer]
+  M -.-> E[USDC on Ethereum Sepolia]
+```
+Three Rust contracts hold all money logic. The worker only quotes, polls prices and calls `trigger`; it cannot move funds the contract does not allow.
 
 ## NEAR features used
 | Feature | Where |
@@ -65,7 +103,7 @@ price under a tier line for sustain_secs (+ settle_secs) ──▶ anyone calls 
 | `peg-pool` | [`floorxa-pool.testnet`](https://testnet.nearblocks.io/address/floorxa-pool.testnet) | `9A4xxa9wiF5uyPhA7izEWjme2S77ovZCNxrcJYn4fuW6` | dumpable demo stable pair that the price comes from |
 | `fusdc` | [`floorxa-fusdc.testnet`](https://testnet.nearblocks.io/address/floorxa-fusdc.testnet) | `68sTUKw9B3s8bjR3GtkohVtdaduZSXzJke4srhqYqYCk` | NEP-141 demo money |
 
-The code hashes above are of the build deployed for the demo. The repository has since gained contract hardening (below) that is covered by tests but not yet redeployed, so the on-chain code is slightly behind `main`.
+The hashes are of the build deployed on testnet; check them against the explorer. Later changes on `main` are in the commit history.
 
 Underwriters (`floorxa-solver-a/b/c.testnet`), the keeper, the arbitrage bot and each guest are separate accounts. Read the live state yourself, no keys needed:
 ```bash
@@ -108,20 +146,29 @@ docs/         SETUP, DEPLOY, CLAIMS, spikes, evidence, screenshots
 scripts/      end-to-end and helper scripts
 ```
 
-## Hardening since the demo
-- **Breach continuity:** time nobody observed never counts as a sustained breach. A gap in price observations longer than `stale_secs` resets the breach clocks, so poke-low, recover unseen, poke-low-later cannot trigger a payout.
-- **Live cover is immutable:** `set_params` is refused while any policy is live (`POLICIES_LIVE`), so the owner cannot rewrite tiers under a holder.
-- **EVM payout nonce:** a payout in `Signing` can only be retried with the same nonce, so one payout cannot be signed twice with different nonces.
-- **Worker abuse limits:** the client IP comes from Cloudflare's `True-Client-IP` header (not the spoofable `X-Forwarded-For`), write endpoints are paced per key, `/api/state` is cached for 2 seconds, live streams are capped, and new guest accounts are capped globally.
-- **Arbitrage both ways:** the bot buys the peg back after a breach and also sells it back down if the demo pool sits above $1.02, so the demo stable returns to about $1.00.
-- **Loading states:** the app shows dashes and "waking the demo server" while the free-tier backend starts, retries with backoff, and shows the last known state with its age instead of zeros.
-- Tests: 55 contract tests, 52 worker tests, all run in CI on every push.
+## Roadmap
+- Redeploy the latest contract build and refresh the code hashes above.
+- Bind the quote signature to the contract account.
+- TWAP price source, swap fees and deeper liquidity in place of a spot read.
+- Real USDC and a real peg pool with mainnet-grade liquidity.
+- Underwriter reputation and margin-efficiency tracking, so better pricers win more flow.
+- Inbound Ethereum confirmation, so the cross-chain leg no longer relies on a trusted executor.
 
 ## Scope and limits
 - Testnet only, demo credits, not regulated insurance. The peg is a demo stable, not USDC; March 2023 is a labelled historical reference.
 - Cover is fully collateralised per policy, and fixed partial payouts do not cover a total collapse. The trigger relies on pokes landing inside the sustain window, and the price is a spot read from a pool anyone can trade against, which is why handing out the dump button is safe here. A real version needs a TWAP, deep liquidity and swap fees. A quote signature does not yet bind the contract account, so a quote could in principle be replayed against a second deployment of the same contract.
 - The Ethereum leg is outbound only and capped at 5 USDC. The contract cannot read Ethereum, so confirmation comes from a trusted executor, and the MPC committee is a trust assumption.
 - Floor runs its own quote flow; it does not claim NEAR's swap solvers underwrite cover. Open items: [`docs/spikes.md`](docs/spikes.md).
+
+## Where each judging question is answered
+| Question | Answer |
+|---|---|
+| Does it work? | [Live demo](https://floorxa.vercel.app), [video](https://drive.google.com/file/d/1lYvC4qibnEfpz2RJsUkKGYo7O_NRkApu/view?usp=sharing), a full cycle in [On-chain proof](#on-chain-proof-near-testnet) |
+| Is it technically deep? | Three contracts, in-contract ed25519 and EVM RLP signing, Chain Signatures, cross-contract callbacks |
+| Is it NEAR-native? | [NEAR features used](#near-features-used) |
+| Is it honest? | [Scope and limits](#scope-and-limits), [`docs/CLAIMS.md`](docs/CLAIMS.md) |
+| Can I reproduce it? | `make verify`: offline, no keys |
+| Is the AI real? | Groq-driven underwriters, with a labelled `scripted` fallback |
 
 ## Built at NEAR HACKATHON 2026
 Build window 2026-11-01 to 2026-11-14, no pre-existing baseline code. Claude Code helped write code and docs; the underwriters call an LLM through the Groq API. Third party: near-sdk, near-contract-standards, near-api-js, chainsig.js, viem, Next.js (see lockfiles) and Binance public market data. Keys live only in `.env` and host environment variables, never in git.
