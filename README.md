@@ -9,6 +9,7 @@ In March 2023 USDC fell to about $0.87 and holders had no cover they could buy i
 | **Live demo** | https://floorxa.vercel.app |
 | **Demo video** | [Watch on Google Drive](https://drive.google.com/file/d/1lYvC4qibnEfpz2RJsUkKGYo7O_NRkApu/view?usp=sharing) |
 | **Demo post on X** | [Post on X](https://x.com/anuraggdubeyy/status/2121463325758525504) |
+| **Backend health** | https://floor-p17j.onrender.com/api/health |
 | **Network** | NEAR testnet, plus Ethereum Sepolia for the cross-chain payout |
 | **Tracks** | Unstoppable DeFi (main), Open Innovation, Agent Economy |
 
@@ -24,7 +25,7 @@ In March 2023 USDC fell to about $0.87 and holders had no cover they could buy i
 </table>
 
 ## Try it in 2 minutes
-1. Open the live demo, go to **`/play`**, and press **Watch it happen** (about 2.5 minutes, fully automatic), or drive it yourself:
+1. Open the live demo, go to **`/play`** (the free backend may need up to a minute to wake; the page says so while it does), and press **Watch it happen** (about 2.5 minutes, fully automatic), or drive it yourself:
 2. **Get an account**: a real NEAR testnet account in one click, funded with demo credits. No wallet, no gas.
 3. **Get quotes**: three AI underwriters read the live pool price, write their reasoning and sign a quote.
 4. **Buy cover**: the contract verifies the signature and locks that underwriter's margin for your policy.
@@ -63,6 +64,8 @@ price under a tier line for sustain_secs (+ settle_secs) ──▶ anyone calls 
 | `floor` | [`floorxa-floor.testnet`](https://testnet.nearblocks.io/address/floorxa-floor.testnet) | `5rT41JtvjPFyNDAEDo19afjgazR9uvRzcBCE8RZ8ipZr` | cover market: quote verification, gate, triggers, payouts, EVM payout |
 | `peg-pool` | [`floorxa-pool.testnet`](https://testnet.nearblocks.io/address/floorxa-pool.testnet) | `9A4xxa9wiF5uyPhA7izEWjme2S77ovZCNxrcJYn4fuW6` | dumpable demo stable pair that the price comes from |
 | `fusdc` | [`floorxa-fusdc.testnet`](https://testnet.nearblocks.io/address/floorxa-fusdc.testnet) | `68sTUKw9B3s8bjR3GtkohVtdaduZSXzJke4srhqYqYCk` | NEP-141 demo money |
+
+The code hashes above are of the build deployed for the demo. The repository has since gained contract hardening (below) that is covered by tests but not yet redeployed, so the on-chain code is slightly behind `main`.
 
 Underwriters (`floorxa-solver-a/b/c.testnet`), the keeper, the arbitrage bot and each guest are separate accounts. Read the live state yourself, no keys needed:
 ```bash
@@ -105,9 +108,18 @@ docs/         SETUP, DEPLOY, CLAIMS, spikes, evidence, screenshots
 scripts/      end-to-end and helper scripts
 ```
 
+## Hardening since the demo
+- **Breach continuity:** time nobody observed never counts as a sustained breach. A gap in price observations longer than `stale_secs` resets the breach clocks, so poke-low, recover unseen, poke-low-later cannot trigger a payout.
+- **Live cover is immutable:** `set_params` is refused while any policy is live (`POLICIES_LIVE`), so the owner cannot rewrite tiers under a holder.
+- **EVM payout nonce:** a payout in `Signing` can only be retried with the same nonce, so one payout cannot be signed twice with different nonces.
+- **Worker abuse limits:** the client IP comes from Cloudflare's `True-Client-IP` header (not the spoofable `X-Forwarded-For`), write endpoints are paced per key, `/api/state` is cached for 2 seconds, live streams are capped, and new guest accounts are capped globally.
+- **Arbitrage both ways:** the bot buys the peg back after a breach and also sells it back down if the demo pool sits above $1.02, so the demo stable returns to about $1.00.
+- **Loading states:** the app shows dashes and "waking the demo server" while the free-tier backend starts, retries with backoff, and shows the last known state with its age instead of zeros.
+- Tests: 55 contract tests, 52 worker tests, all run in CI on every push.
+
 ## Scope and limits
 - Testnet only, demo credits, not regulated insurance. The peg is a demo stable, not USDC; March 2023 is a labelled historical reference.
-- Cover is fully collateralised per policy, and fixed partial payouts do not cover a total collapse. The trigger relies on pokes landing inside the sustain window; a TWAP is the next step.
+- Cover is fully collateralised per policy, and fixed partial payouts do not cover a total collapse. The trigger relies on pokes landing inside the sustain window, and the price is a spot read from a pool anyone can trade against, which is why handing out the dump button is safe here. A real version needs a TWAP, deep liquidity and swap fees. A quote signature does not yet bind the contract account, so a quote could in principle be replayed against a second deployment of the same contract.
 - The Ethereum leg is outbound only and capped at 5 USDC. The contract cannot read Ethereum, so confirmation comes from a trusted executor, and the MPC committee is a trust assumption.
 - Floor runs its own quote flow; it does not claim NEAR's swap solvers underwrite cover. Open items: [`docs/spikes.md`](docs/spikes.md).
 
