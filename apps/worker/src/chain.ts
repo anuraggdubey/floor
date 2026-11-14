@@ -36,13 +36,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** The public RPCs answer HTTP 429 or a JSON-RPC error with code -429 / "Rate limit" when throttling. */
 export function isRateLimited(e: unknown): boolean {
   const m = String((e as Error)?.message ?? e);
-  return /429|rate limit/i.test(m);
+  return /(^|[^\w])-?429([^\w]|$)|rate limit|too many requests/i.test(m);
 }
 
 /** An endpoint that refused us before doing any work: throttled, unreachable or discontinued. Safe to try elsewhere. */
 export function isEndpointFailure(e: unknown): boolean {
   const m = String((e as Error)?.message ?? e);
-  return isRateLimited(e) || /fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|(502|503|504)|bad gateway|service unavailable/i.test(m);
+  // A contract panic or an on-chain failure is a real answer and never an endpoint problem.
+  if (/Smart contract panicked|ExecutionError|FunctionCallError/i.test(m)) return false;
+  return (
+    isRateLimited(e) ||
+    /fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|internal server error|bad gateway|service unavailable|gateway time-?out|HTTP (status )?5\d\d/i.test(m)
+  );
 }
 
 /** How long an endpoint that just throttled us is left alone. */

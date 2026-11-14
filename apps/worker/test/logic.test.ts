@@ -144,3 +144,19 @@ describe("arb sells back an over-peg pool", () => {
     expect(dusdNeededToRestore(900n, 1000n)).toBe(0n);
   });
 });
+
+describe("endpoint failure detection", () => {
+  it("treats throttling, outages and 5xx as endpoint problems", async () => {
+    const { isEndpointFailure } = await import("../src/chain.js");
+    expect(isEndpointFailure(new Error('{"error":{"code":-429,"message":"Rate limits exceeded"}}'))).toBe(true);
+    expect(isEndpointFailure(new Error("fetch failed"))).toBe(true);
+    expect(isEndpointFailure(new Error("Internal server error"))).toBe(true);
+    expect(isEndpointFailure(new Error("Bad Gateway"))).toBe(true);
+  });
+  it("never treats a real on-chain answer as an endpoint problem", async () => {
+    const { isEndpointFailure } = await import("../src/chain.js");
+    expect(isEndpointFailure(new Error("Smart contract panicked: GATE_CLOSED"))).toBe(false);
+    expect(isEndpointFailure(new Error('{"ActionError":{"kind":{"FunctionCallError":{"ExecutionError":"amount 500 and 503"}}}}'))).toBe(false);
+    expect(isEndpointFailure(new Error("amount 5030000 is too large"))).toBe(false);
+  });
+});

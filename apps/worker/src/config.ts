@@ -69,9 +69,9 @@ export function loadConfig(): Cfg {
       ...extra,
       "https://test.rpc.fastnear.com",
       "https://near-testnet.drpc.org",
-      "https://near-testnet.gateway.tatum.io",
+      "https://rpc.testnet.fastnear.com",
       "https://archival-rpc.testnet.fastnear.com",
-      "https://rpc.testnet.near.org", // slow (about 3s) but independent, so it is the last resort
+      "https://archival-rpc.testnet.near.org", // slow (about 3s) but independent, so it is the last resort
     ].filter((v, i, a) => a.indexOf(v) === i),
     fusdc: req("FUSDC_CONTRACT"),
     pool: req("POOL_CONTRACT"),
