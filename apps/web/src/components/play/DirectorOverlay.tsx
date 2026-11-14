@@ -19,7 +19,7 @@ function Ring({ c }: { c: Countdown }) {
   return (
     <div className="flex items-center gap-3.5">
       <svg viewBox="0 0 52 52" className="h-[3.25rem] w-[3.25rem] -rotate-90" aria-hidden="true">
-        <circle cx="26" cy="26" r={R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
+        <circle cx="26" cy="26" r={R} fill="none" stroke="var(--color-line)" strokeWidth="3" />
         <circle
           cx="26"
           cy="26"
@@ -112,7 +112,7 @@ export function DirectorOverlay({
                 const n = i + 1;
                 const state = view.done || (ch && n < ch.n) ? "done" : ch && n === ch.n ? "now" : "todo";
                 return (
-                  <span key={i} className="bg-white/12 relative h-[3px] flex-1 overflow-hidden rounded-full">
+                  <span key={i} className="bg-line relative h-[3px] flex-1 overflow-hidden rounded-full">
                     <span
                       className={`absolute inset-y-0 left-0 rounded-full bg-[color:var(--color-blue-lit)] ${
                         state === "now" ? "w-full animate-pulse" : state === "done" ? "w-full" : "w-0"

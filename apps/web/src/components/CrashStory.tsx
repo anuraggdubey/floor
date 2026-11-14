@@ -58,8 +58,8 @@ export function CrashStory() {
             </defs>
 
             {/* the peg, and the line cover would have paid at */}
-            <line x1="0" y1={y(1)} x2={W} y2={y(1)} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-            <text x="6" y={y(1) - 8} fill="rgba(255,255,255,0.32)" fontSize="13" fontFamily="ui-monospace,monospace">
+            <line x1="0" y1={y(1)} x2={W} y2={y(1)} stroke="var(--color-bone)" strokeOpacity="0.16" strokeWidth="1" />
+            <text x="6" y={y(1) - 8} fill="var(--color-bone)" fillOpacity="0.4" fontSize="13" fontFamily="ui-monospace,monospace">
               $1.00 peg
             </text>
             {[0.97, 0.93, 0.9].map((lvl) => (
@@ -101,10 +101,10 @@ export function CrashStory() {
                 <g key={m.h} style={{ opacity: seen ? 1 : 0, transition: "opacity .5s ease" }}>
                   <circle cx={px} cy={py} r="5" fill="#ff4438" />
                   <circle cx={px} cy={py} r="11" fill="none" stroke="#ff4438" strokeOpacity="0.35" />
-                  <text x={px + 16} y={py - 10} fill="#f3f2ee" fontSize="16" fontFamily="ui-monospace,monospace">
+                  <text x={px + 16} y={py - 10} fill="var(--color-bone)" fontSize="16" fontFamily="ui-monospace,monospace">
                     {m.label}
                   </text>
-                  <text x={px + 16} y={py + 10} fill="rgba(255,255,255,0.5)" fontSize="13">
+                  <text x={px + 16} y={py + 10} fill="var(--color-bone)" fillOpacity="0.55" fontSize="13">
                     {m.sub}
                   </text>
                 </g>

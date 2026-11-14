@@ -37,7 +37,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${grotesk.variable} ${serif.variable} ${mono.variable}`}>
+    <html lang="en" className={`${grotesk.variable} ${serif.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* set the saved theme before first paint so a light-mode visitor never sees a dark flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{var t=localStorage.getItem('floor.theme');if(t==='light')document.documentElement.dataset.theme='light'}catch(e){}",
+          }}
+        />
+      </head>
       <body className="bg-ink text-bone antialiased">
         <SmoothScroll />
         <RevealProvider />

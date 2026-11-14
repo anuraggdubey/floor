@@ -3,6 +3,7 @@ import { LogoMark } from "./Logo";
 import { Doorway } from "./Doorway";
 import { Crowd } from "./Crowd";
 import { Magnetic } from "./Magnetic";
+import { ThemeToggle } from "./ThemeToggle";
 
 const COLUMNS: Array<{ title: string; links: Array<{ label: string; href: string; external?: boolean }> }> = [
   {
@@ -128,6 +129,9 @@ export function Footer() {
           <span>Testnet demo</span>
           <span>Built at NEAR HACKATHON 2026</span>
           <span>MIT licensed</span>
+          <span className="sm:ml-auto">
+            <ThemeToggle />
+          </span>
         </div>
       </div>
 

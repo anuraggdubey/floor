@@ -25,7 +25,7 @@
 
 ---
 
-## The why
+## The gap in depeg cover
 
 In March 2023 USDC traded near **$0.87** for a weekend. Holders using it as treasury or collateral either took the loss or had no cover they could buy in time.
 
@@ -97,11 +97,37 @@ The cover lifecycle, every parameter and the API are written up in the [**docs**
 
 ## Architecture
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="Floor architecture: a holder in the browser, the worker API and three AI underwriters off chain; the floor, peg-pool and fusdc contracts and Chain Signatures on NEAR testnet; and a USDC payout on Ethereum Sepolia. Numbered steps show the buy, the price read, the keeper, the sign request and the payout." width="100%" />
-</p>
+```mermaid
+flowchart LR
+  subgraph OFF["Off chain"]
+    H(["Holder<br/>browser, no wallet"])
+    W["Worker API<br/>quotes, price feed, keeper"]
+    U["3 AI underwriters<br/>own account, margin and quote key"]
+  end
+  subgraph NEAR["NEAR testnet"]
+    F["floor<br/>verify quote, gate, breach clocks, payout"]
+    P["peg-pool<br/>demo stable, source of the price"]
+    M["fusdc<br/>NEP-141 demo money"]
+    S["Chain Signatures<br/>v1.signer-prod.testnet"]
+  end
+  subgraph ETH["Ethereum Sepolia"]
+    E(["USDC payout"])
+  end
+  H -- "1. request for quote" --> W
+  W -- "2. ask" --> U
+  U -- "3. signed quotes" --> W
+  W -- "best quote" --> H
+  H -- "4. premium + quote" --> F
+  P -- "5. price" --> F
+  F <--> M
+  W -- "6. poke, activate, trigger" --> F
+  F -- "7. pay holder" --> H
+  F -. "8. sign this transfer" .-> S
+  S -. "9. signature" .-> W
+  W -. "10. broadcast" .-> E
+```
 
-Three Rust contracts hold all the money logic. The worker only quotes, polls prices and calls `trigger`; it cannot move funds the contract does not allow. Numbers on the arrows follow a policy through its life: **1** the holder buys with a signed quote, **2** the contract reads the pool price, **3** the keeper pokes, activates and triggers, **4** the contract asks the NEAR signer to sign a USDC transfer, **5** the USDC lands on Sepolia.
+Three Rust contracts hold all the money logic. The worker only quotes, polls prices and calls `trigger`; it cannot move funds the contract does not allow. Numbers on the arrows follow a policy through its life, from the request for quote to the USDC landing on Sepolia (dashed arrows are the optional cross-chain leg).
 
 ```
 holder ──RFQ──▶ worker ──▶ 3 AI underwriters (own NEAR accounts, own margin, own ed25519 quote keys)

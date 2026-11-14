@@ -24,6 +24,40 @@
   --ease-smooth: cubic-bezier(0.65, 0.05, 0, 1);
 }
 
+/* ------------------------------------------------------------- light theme */
+/* The same tokens, re-pointed. Every utility reads these variables, so the whole site follows. */
+html[data-theme="light"] {
+  --color-ink: #f6f5f1;
+  --color-ink-2: #ecebe5;
+  --color-ink-3: #e1dfd7;
+  --color-line: #d3d0c6;
+  --color-bone: #15171b;
+  --color-mute: #5b616a;
+  --color-blue: #1e6ef3;
+  --color-blue-lit: #1d5fd6;
+  --color-amber: #a85f00;
+  --color-mint: #0b8f58;
+  --color-blood: #d42a1f;
+  color-scheme: light;
+}
+html[data-theme="light"] .grain {
+  opacity: 0.035;
+  mix-blend-mode: multiply;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #b9b5a9;
+}
+html[data-theme="light"] ::selection {
+  background: var(--color-blue);
+  color: #fff;
+}
+html {
+  transition: background-color 0.4s ease;
+}
+body {
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
 /* ------------------------------------------------------------------- base */
 html {
   background: var(--color-ink);

@@ -139,7 +139,7 @@ export function TimeMachine() {
             </defs>
             {[0.88, 0.9, 0.93, 0.97, 1].map((g) => (
               <g key={g}>
-                <line x1={PAD.l} x2={W - PAD.r} y1={y(g)} y2={y(g)} stroke="#23272e" strokeWidth="1" />
+                <line x1={PAD.l} x2={W - PAD.r} y1={y(g)} y2={y(g)} stroke="var(--color-line)" strokeWidth="1" />
                 <text x={PAD.l - 8} y={y(g) + 4} textAnchor="end" className="fill-mute font-mono" fontSize="11">
                   {g.toFixed(2)}
                 </text>
@@ -161,7 +161,7 @@ export function TimeMachine() {
             {area && <path d={area} fill="url(#tmfill)" />}
             {path && <path d={path} fill="none" stroke={crashed ? "#ff4438" : "#46e39b"} strokeWidth="2.5" strokeLinejoin="round" filter="url(#tmglow)" />}
             {data.waypoints.filter((w) => w.i >= 0 && w.i <= idx).map((w) => (
-              <circle key={w.i} cx={x(w.i)} cy={y(w.price)} r="3.5" fill="#f3f2ee" opacity="0.8" />
+              <circle key={w.i} cx={x(w.i)} cy={y(w.price)} r="3.5" fill="var(--color-bone)" opacity="0.8" />
             ))}
             {idx >= 0 && (
               <g>
