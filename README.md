@@ -3,7 +3,7 @@
 [![CI](https://github.com/anuraggdubey/floor/actions/workflows/ci.yml/badge.svg)](https://github.com/anuraggdubey/floor/actions/workflows/ci.yml)
 ![NEAR testnet](https://img.shields.io/badge/NEAR-testnet-00ec97)
 ![Rust near-sdk 5](https://img.shields.io/badge/Rust-near--sdk%205-orange)
-![Tests](https://img.shields.io/badge/tests-55%20contract%20%7C%2052%20worker-brightgreen)
+![Tests](https://img.shields.io/badge/tests-55%20contract%20%7C%2054%20worker-brightgreen)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Stablecoin depeg cover that pays itself.** AI underwriters compete to back your cover with their own locked margin. NEAR contracts verify every quote, enforce the rules, and pay you automatically when the peg breaks: no claim form, no committee. Built for **NEAR HACKATHON 2026**.
@@ -108,10 +108,10 @@ These are the final builds, matching `main`. `floor` was redeployed in place on 
 **Lifetime activity on `floorxa-floor.testnet`** (read from contract state, 2026-11-15):
 | | |
 |---|---|
-| Policies bought | 20 (10 paid out, 7 expired, 3 void) |
-| Premiums collected | 23.00 fUSDC |
-| Paid to holders on NEAR | 119.00 fUSDC |
-| Ethereum Sepolia payouts | 4 confirmed, 5 USDC each (20 USDC), all through Chain Signatures |
+| Policies bought | 35 (12 paid out, 18 expired, 5 void) |
+| Premiums collected | 34.60 fUSDC |
+| Paid to holders on NEAR | 149.00 fUSDC |
+| Ethereum Sepolia payouts | 5 confirmed, 5 USDC each (25 USDC), all through Chain Signatures |
 | Underwriters | 3, each with its own NEAR account and locked margin |
 | Open cover right now | none (locked margin 0) |
 
@@ -130,6 +130,12 @@ near contract call-function as-read-only floorxa-floor.testnet get_policy json-a
 | A late buyer is refused on-chain (`GATE_CLOSED`) and refunded | [`E7NDVYi4…9ykNk`](https://testnet.nearblocks.io/txns/E7NDVYi4tSZedvVtqkf4oi695NBbhGtewSFNinP9ykNk) |
 | Sustained breach: `trigger` pays the holder 15.00 fUSDC and reserves a 5 USDC Ethereum payout | [`DMQj7VQH…tJk4`](https://testnet.nearblocks.io/txns/DMQj7VQH5sSx9w1eyX8wagq1uyaJ2Lg9h3sPCpRdtJk4) |
 | Cross-chain leg (policy #5): Chain Signatures signs, 5.00 USDC lands on Sepolia | [`0x22fe0094…5b03`](https://sepolia.etherscan.io/tx/0x22fe00940d020c6b0f776445ed102c478e1a4b8bfcbc8425672306095c835b03) |
+
+**Latest run on the final build** (the full "Watch it happen" demo on the live site, 2026-11-14, 2m53s, 0.60 paid in, 15.00 fUSDC paid out):
+| Step | Transaction |
+|---|---|
+| Buy from the winning AI underwriter | [`D9DWf2tP…kao`](https://testnet.nearblocks.io/txns/D9DWf2tP7FZctGZreCVoibTQ5ynASqMRZA5zeqG4Hkao) |
+| 5.00 USDC lands on Ethereum Sepolia, sent from the address the Floor contract controls | [`0x41a4b3cd…47a0`](https://sepolia.etherscan.io/tx/0x41a4b3cdc1b2d04278144cdc4a017dafe65d76f508b168cb9d40c133123747a0) |
 
 More transactions and the Chain Signatures sign request are in [`docs/evidence`](docs/evidence).
 
