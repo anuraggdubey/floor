@@ -50,6 +50,20 @@ export function isEndpointFailure(e: unknown): boolean {
   );
 }
 
+/**
+ * A transaction that has not confirmed after this long is reported as failed instead of hanging the caller. It is
+ * never retried: the transaction may well have landed, and sending it again could act twice.
+ */
+const SEND_TIMEOUT_MS = 40_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limit = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error("TX_TIMEOUT: the network did not confirm in time")), ms);
+  });
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
+}
+
 /** How long an endpoint that just throttled us is left alone. */
 const COOL_MS = 25_000;
 
@@ -73,11 +87,15 @@ export class Chain {
     this.coolUntil = this.providers.map(() => 0);
   }
 
-  /** Endpoint indexes in the order to try them: healthy ones first (rotating, to spread load), cooled-down last. */
-  private order(): number[] {
+  /**
+   * Endpoint indexes in the order to try them, cooled-down ones last. Reads rotate to spread load. Writes are sticky
+   * (config order): a transaction should be sent and confirmed through the same well-synced node, because a node
+   * that lags makes the SDK wait on a result it cannot see yet.
+   */
+  private order(sticky = false): number[] {
     const n = this.providers.length;
     const now = Date.now();
-    const start = this.rr++ % n;
+    const start = sticky ? 0 : this.rr++ % n;
     const all = Array.from({ length: n }, (_, i) => (start + i) % n);
     return [...all.filter((i) => this.coolUntil[i]! <= now), ...all.filter((i) => this.coolUntil[i]! > now)];
   }
@@ -176,17 +194,17 @@ export class Chain {
      const tried: number[] = [];
      for (let attempt = 0; ; attempt++) {
       // first healthy endpoint we have not just failed on; once all have been tried, start over after a pause
-      const idx = this.order().find((i) => !tried.includes(i)) ?? this.order()[0]!;
+      const idx = this.order(true).find((i) => !tried.includes(i)) ?? this.order(true)[0]!;
       tried.push(idx);
       try {
-        const res: any = await this.signerAt(signer, idx).callFunctionRaw({
+        const res: any = await withTimeout(this.signerAt(signer, idx).callFunctionRaw({
           contractId,
           methodName,
           args,
           gas: teraToGas(`${opts.tgas ?? 100}`),
           deposit: opts.deposit ?? 0n,
           waitUntil: "EXECUTED",
-        });
+        }), SEND_TIMEOUT_MS);
         const logs: string[] = (res.receipts_outcome ?? []).flatMap((o: any) => o.outcome?.logs ?? []);
         const hash: string = res.transaction_outcome?.id ?? res.transaction?.hash ?? "";
         const failure = res.status?.Failure;
